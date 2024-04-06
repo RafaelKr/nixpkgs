@@ -4470,8 +4470,6 @@ with pkgs;
 
   bundletool = callPackage ../development/tools/bundletool { };
 
-  bustle = haskellPackages.bustle;
-
   bwm_ng = callPackage ../tools/networking/bwm-ng { };
 
   bwbasic = callPackage ../development/interpreters/bwbasic { };
