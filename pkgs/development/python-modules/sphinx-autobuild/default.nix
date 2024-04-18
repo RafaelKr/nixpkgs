@@ -9,13 +9,13 @@
 
 buildPythonPackage rec {
   pname = "sphinx-autobuild";
-  version = "2024.2.4";
+  version = "2024.4.16";
   pyproject = true;
 
   src = fetchPypi {
     pname = "sphinx_autobuild";
     inherit version;
-    hash = "sha256-y50hIaF21i1FRxYkhyr8X613Va1mJzir5ADs9KeVQwM=";
+    hash = "sha256-HA7Tehlw7tGX+cWmbWV1nnxOTLp7Wl13lAdSvxpZ8sc=";
   };
 
   build-system = [
