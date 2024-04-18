@@ -22,14 +22,14 @@
 
 buildPythonPackage rec {
   pname = "joblib";
-  version = "1.3.2";
+  version = "1.4.0";
   format = "pyproject";
 
   disabled = pythonOlder "3.7";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-kvhl5iHhd4TnlVCAttBCSJ47jilJScxExurDBPWXcrE=";
+    hash = "sha256-HrDcCRkZzThEkN6JDLXf1ThBCm1LO1Tu8J+4xQtAmxw=";
   };
 
   patches = [
