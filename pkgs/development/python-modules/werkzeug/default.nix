@@ -29,14 +29,14 @@
 
 buildPythonPackage rec {
   pname = "werkzeug";
-  version = "3.0.1";
+  version = "3.0.2";
   format = "pyproject";
 
   disabled = pythonOlder "3.8";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-UH6BHs6nKxikBJR63tSzOQ4duPgmtJTXZVDvRbs7Hcw=";
+    hash = "sha256-45tkWmrJKCJYjns5ppLngockzq4LDXAu+WcB+Q5wEo0=";
   };
 
   patches = [
