@@ -13,12 +13,12 @@
 
 buildPythonPackage rec {
   pname = "requests-mock";
-  version = "1.11.0";
+  version = "1.12.1";
   format = "setuptools";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-7xC1crSJpfKOCbcIaXIIxKOyuJ74Cp8BWENA6jV+w8Q=";
+    hash = "sha256-6eEuMztSUVboKjyFLyIBa5FYIg0vR0VN6crop303FAE=";
   };
 
   propagatedBuildInputs = [ requests six ];
