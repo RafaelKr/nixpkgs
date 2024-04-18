@@ -7,12 +7,12 @@
 
 buildPythonPackage rec {
   pname = "matplotlib-inline";
-  version = "0.1.6";
+  version = "0.1.7";
   format = "setuptools";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-+Ifl8Qupjo0rFQ3c9HAsHl+LOiAAXrD3S/29Ng7m8wQ=";
+    hash = "sha256-hCOyPsZmvj0W4WtgvdisToboQOvR3RGjC58Rfy+gq5A=";
   };
 
   propagatedBuildInputs = [
