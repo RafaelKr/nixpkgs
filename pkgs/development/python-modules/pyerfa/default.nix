@@ -15,11 +15,11 @@
 buildPythonPackage rec {
   pname = "pyerfa";
   format = "pyproject";
-  version = "2.0.1.1";
+  version = "2.0.1.4";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-26x07409Ow8i7wrTu72zCyqeEFcLH6Wpi+NMe+Nsmms=";
+    hash = "sha256-rLimcTIy6jXAS8bkCsTkYd/MgX05XvKjyAUcGjMkndM=";
   };
 
   nativeBuildInputs = [
