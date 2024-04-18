@@ -14,14 +14,14 @@
 
 buildPythonPackage rec {
   pname = "pyfakefs";
-  version = "5.3.5";
+  version = "5.4.1";
   pyproject = true;
 
   disabled = pythonOlder "3.5";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-fNxQCzWiFMt6YU4ZQFQ6zGZQ5pqUrHbjDzPJNzvZz5A=";
+    hash = "sha256-IMtR6GDC8/+DhZFirVE0u4sKHnqB3woYz8zEhi0Nncw=";
   };
 
   postPatch = ''
