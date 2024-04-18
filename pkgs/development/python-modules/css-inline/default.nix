@@ -18,14 +18,14 @@
 
 buildPythonPackage rec {
   pname = "css-inline";
-  version = "0.13.0";
+  version = "0.14.0";
   pyproject = true;
 
   src = fetchFromGitHub {
     owner = "Stranger6667";
     repo = "css-inline";
     rev = "python-v${version}";
-    hash = "sha256-hhjeOr7EJc4Tmn/eQ1vF0xChSIlgfSmtqi6s7WCUq00=";
+    hash = "sha256-CdR90GGPWOerXWfVeHrFLAelL+MJ9bfoB4TjKBdRSL0=";
   };
 
   postPatch = ''
