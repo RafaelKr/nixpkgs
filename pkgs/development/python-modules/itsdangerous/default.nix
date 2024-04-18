@@ -8,13 +8,13 @@
 
 buildPythonPackage rec {
   pname = "itsdangerous";
-  version = "2.1.2";
+  version = "2.2.0";
   format = "setuptools";
   disabled = pythonOlder "3.6";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-XbvGizF+XkLzJ/kCF2NUXcP8O/4i5t65aq8fw4h0FWo=";
+    hash = "sha256-4AUMC32h7qU/+vFJwM+7XG4uK2nEvvIsgfputz5fYXM=";
   };
 
   nativeCheckInputs = [
