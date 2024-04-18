@@ -1,6 +1,7 @@
 { lib
 , buildPythonPackage
 , fetchPypi
+, flit-core
 , packaging
 , pytestCheckHook
 , pythonOlder
@@ -16,17 +17,17 @@ buildPythonPackage rec {
 
   disabled = pythonOlder "3.7";
 
-  src = fetchPypi rec {
-    inherit pname version;
+  src = fetchPypi {
+    pname = "pyproject_metadata";
+    inherit version;
     hash = "sha256-N21aAHZKwpRApUV5+I5mt9nLfmKdNcNaHHJIv+vJtFU=";
   };
 
-  nativeBuildInputs = [
-    setuptools
-    wheel
+  build-system = [
+    flit-core
   ];
 
-  propagatedBuildInputs = [
+  dependencies = [
     packaging
   ];
 
