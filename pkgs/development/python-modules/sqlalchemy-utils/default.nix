@@ -38,13 +38,13 @@
 
 buildPythonPackage rec {
   pname = "sqlalchemy-utils";
-  version = "0.41.1";
+  version = "0.41.2";
   format = "setuptools";
 
   src = fetchPypi {
     inherit version;
     pname = "SQLAlchemy-Utils";
-    hash = "sha256-ohgb/wHuuER544Vx0sBxjrUgQvmv2MGU0NAod+hLfXQ=";
+    hash = "sha256-vFmcjDszGeU85sXDxHESC9Ml0AcftvOKEOkk49B7mZA=";
   };
 
   patches = [
