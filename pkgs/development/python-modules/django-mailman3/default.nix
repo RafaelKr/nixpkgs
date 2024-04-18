@@ -17,12 +17,12 @@
 
 buildPythonPackage rec {
   pname = "django-mailman3";
-  version = "1.3.11";
+  version = "1.3.12";
   format = "setuptools";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-uIjJaZHWL2evj+oISLprvKWT5Sm5f2EKgUD1twL1VbQ=";
+    hash = "sha256-MnQlT5ElNnStLUKyOXnI7ZDDaBwfp+h9tbOC+cwB0es=";
   };
 
   postPatch = ''
