@@ -18,14 +18,14 @@
 
 buildPythonPackage rec {
   pname = "typer";
-  version = "0.9.0";
+  version = "0.12.3";
   format = "pyproject";
 
   disabled = pythonOlder "3.6";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-UJIv15rqL0dRqOBAj/ENJmK9DIu/qEdVppnzutopeLI=";
+    hash = "sha256-SecxMUgdgEKI72JZjZehzu8wWJBapTahE0+QiRujVII=";
   };
 
   patches = [
