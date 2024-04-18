@@ -4,12 +4,12 @@
 
 buildPythonPackage rec {
   pname = "click-didyoumean";
-  version = "0.3.0";
+  version = "0.3.1";
   format = "setuptools";
 
   src = fetchPypi {
     inherit pname version;
-    sha256 = "f184f0d851d96b6d29297354ed981b7dd71df7ff500d82fa6d11f0856bee8035";
+    sha256 = "sha256-T4L9/w2+ZO+Ksieb1qo/apnDsowFqgnL/AfJ1/u1pGM=";
   };
 
   propagatedBuildInputs = [ click ];
