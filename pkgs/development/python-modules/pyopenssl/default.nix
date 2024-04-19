@@ -9,7 +9,7 @@
 , pretend
 , sphinxHook
 , sphinx-rtd-theme
-, flaky
+, pytest-rerunfailures
 }:
 
 buildPythonPackage rec {
@@ -46,8 +46,8 @@ buildPythonPackage rec {
   ];
 
   nativeCheckInputs = [
-    flaky
     pretend
+    pytest-rerunfailures
     pytestCheckHook
   ];
 
