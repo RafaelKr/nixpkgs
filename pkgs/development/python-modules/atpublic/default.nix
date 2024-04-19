@@ -3,7 +3,7 @@
 , fetchPypi
 , pytestCheckHook
 , pythonOlder
-, pdm-backend
+, hatchling
 , sybil
 , typing-extensions
 }:
@@ -21,7 +21,7 @@ buildPythonPackage rec {
   };
 
   nativeBuildInputs = [
-    pdm-backend
+    hatchling
   ];
 
   propagatedBuildInputs = lib.optionals (pythonOlder "3.8") [
