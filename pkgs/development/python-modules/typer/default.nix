@@ -5,7 +5,7 @@
 , colorama
 , coverage
 , fetchPypi
-, flit-core
+, pdm-backend
 , pytest-sugar
 , pytest-xdist
 , pytestCheckHook
@@ -28,7 +28,7 @@ buildPythonPackage rec {
   };
 
   nativeBuildInputs = [
-    flit-core
+    pdm-backend
   ];
 
   propagatedBuildInputs = [
