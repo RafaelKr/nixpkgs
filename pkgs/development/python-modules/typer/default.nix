@@ -4,7 +4,6 @@
 , click
 , colorama
 , coverage
-, fetchpatch
 , fetchPypi
 , flit-core
 , pytest-sugar
@@ -27,15 +26,6 @@ buildPythonPackage rec {
     inherit pname version;
     hash = "sha256-SecxMUgdgEKI72JZjZehzu8wWJBapTahE0+QiRujVII=";
   };
-
-  patches = [
-    # https://github.com/tiangolo/typer/pull/651
-    (fetchpatch {
-      name = "unpin-flit-core-dependency.patch";
-      url = "https://github.com/tiangolo/typer/commit/78a0ee2eec9f54ad496420e177fdaad84984def1.patch";
-      hash = "sha256-VVUzFvF2KCXXkCfCU5xu9acT6OLr+PlQQPeVGONtU4A=";
-    })
-  ];
 
   nativeBuildInputs = [
     flit-core
