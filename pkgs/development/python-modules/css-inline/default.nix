@@ -42,7 +42,7 @@ buildPythonPackage rec {
       ln -s ${./Cargo.lock} Cargo.lock
     '';
     name = "${pname}-${version}";
-    hash = "sha256-noYBSwCfdpuwb55toyx4K/16Z4A0NWjnMuzwTi5g8AU=";
+    hash = "sha256-/GO7OcUl0iFgEhr8ZWZQOTNqHn7bt38PpFs0HktmAhE=";
   };
 
   nativeBuildInputs = [
@@ -67,6 +67,7 @@ buildPythonPackage rec {
 
   disabledTests = [
     # fails to connect to local server
+    "test_cache"
     "test_remote_stylesheet"
   ] ++ lib.optionals (stdenv.isDarwin) [
     # pyo3_runtime.PanicException: event loop thread panicked
