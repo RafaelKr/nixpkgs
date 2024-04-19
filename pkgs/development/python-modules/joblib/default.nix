@@ -2,7 +2,6 @@
 , buildPythonPackage
 , pythonOlder
 , fetchPypi
-, fetchpatch
 , pythonAtLeast
 , stdenv
 
@@ -31,14 +30,6 @@ buildPythonPackage rec {
     inherit pname version;
     hash = "sha256-HrDcCRkZzThEkN6JDLXf1ThBCm1LO1Tu8J+4xQtAmxw=";
   };
-
-  patches = [
-    (fetchpatch {
-      name = "suppress-deprecation-warnings-with-python312.patch";
-      url = "https://github.com/joblib/joblib/commit/05caf0772d605799e5d2337018fd32ac829b37aa.patch";
-      hash = "sha256-bfqxCLFkCnuWMIkIbcjh+nCTv38A8jxvyCHeJPxoZwg=";
-    })
-  ];
 
   nativeBuildInputs = [
     setuptools
