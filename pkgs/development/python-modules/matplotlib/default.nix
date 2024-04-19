@@ -12,7 +12,6 @@
 , pybind11
 , setuptools
 , setuptools-scm
-, wheel
 
 # native libraries
 , ffmpeg-headless
@@ -79,7 +78,7 @@ in
 buildPythonPackage rec {
   version = "3.8.4";
   pname = "matplotlib";
-  format = "pyproject";
+  pyproject = true;
 
   disabled = pythonOlder "3.8";
 
@@ -100,7 +99,10 @@ buildPythonPackage rec {
     let
       tcl_tk_cache = ''"${tk}/lib", "${tcl}/lib", "${lib.strings.substring 0 3 tk.version}"'';
     in
-    lib.optionalString enableTk ''
+    ''
+      substituteInPlace pyproject.toml \
+        --replace-fail '"numpy>=2.0.0rc1,<2.3",' ""
+    '' + lib.optionalString enableTk ''
       sed -i '/self.tcl_tk_cache = None/s|None|${tcl_tk_cache}|' setupext.py
     '' + lib.optionalString (stdenv.isLinux && interactive) ''
       # fix paths to libraries in dlopen calls (headless detection)
@@ -110,13 +112,7 @@ buildPythonPackage rec {
     '';
 
   nativeBuildInputs = [
-    certifi
-    numpy
     pkg-config
-    pybind11
-    setuptools
-    setuptools-scm
-    wheel
   ] ++ lib.optionals enableGtk3 [
     gobject-introspection
   ];
@@ -143,7 +139,15 @@ buildPythonPackage rec {
     "strictoverflow"
   ];
 
-  propagatedBuildInputs = [
+  build-system = [
+    certifi
+    numpy
+    pybind11
+    setuptools
+    setuptools-scm
+  ];
+
+  dependencies = [
     # explicit
     contourpy
     cycler
