@@ -1,18 +1,24 @@
 { lib
 , buildPythonPackage
 , fetchPypi
+, setuptools
 , cryptography
 }:
 
 buildPythonPackage rec {
   pname = "pymysql";
   version = "1.1.0";
+  pyproject = true;
 
   src = fetchPypi {
     pname = "PyMySQL";
     inherit version;
-    sha256 = "sha256-TxOn34vzalHoHdnzYF/t5FpIeP4C+SNjSf2Co/BhL5Y=";
+    hash = "sha256-TxOn34vzalHoHdnzYF/t5FpIeP4C+SNjSf2Co/BhL5Y=";
   };
+
+  build-system = [
+    setuptools
+  ];
 
   propagatedBuildInputs = [ cryptography ];
 
