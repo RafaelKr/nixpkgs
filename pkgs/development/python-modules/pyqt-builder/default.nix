@@ -3,7 +3,7 @@
 , fetchPypi
 , packaging
 , setuptools
-, setuptools_scm
+, setuptools-scm
 , sip
 , wheel
 }:
@@ -21,7 +21,7 @@ buildPythonPackage rec {
 
   nativeBuildInputs = [
     setuptools
-    setuptools_scm
+    setuptools-scm
     wheel
   ];
 
