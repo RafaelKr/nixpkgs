@@ -6,28 +6,28 @@
 , python-dateutil
 , pythonOlder
 , scramp
-, setuptools
+, hatchling
 , versioningit
 }:
 
 buildPythonPackage rec {
   pname = "pg8000";
   version = "1.31.1";
-  format = "pyproject";
+  pyproject = true;
 
-  disabled = pythonOlder "3.7";
+  disabled = pythonOlder "3.8";
 
   src = fetchPypi {
     inherit pname version;
     hash = "sha256-sREw1MYV3TBi6o/tgUMGSnl4t/5tRPFLciYdQ8jicIc=";
   };
 
-  nativeBuildInputs = [
-    setuptools
+  build-system = [
+    hatchling
     versioningit
   ];
 
-  propagatedBuildInputs = [
+  dependencies = [
     passlib
     python-dateutil
     scramp
