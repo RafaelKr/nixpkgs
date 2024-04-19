@@ -8,6 +8,7 @@
 , setuptools
 
 # tests
+, pandas
 , pytestCheckHook
 , undefined
 }:
@@ -46,6 +47,7 @@ buildPythonPackage rec {
   ];
 
   nativeCheckInputs = [
+    pandas
     pytestCheckHook
     undefined
   ];
