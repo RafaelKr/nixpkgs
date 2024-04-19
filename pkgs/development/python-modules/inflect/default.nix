@@ -2,9 +2,11 @@
 , buildPythonPackage
 , fetchPypi
 , isPy27
+, more-itertools
 , setuptools-scm
 , pydantic
 , pytestCheckHook
+, typeguard
 }:
 
 buildPythonPackage rec {
@@ -20,7 +22,11 @@ buildPythonPackage rec {
 
   nativeBuildInputs = [ setuptools-scm ];
 
-  propagatedBuildInputs = [ pydantic ];
+  propagatedBuildInputs = [
+    more-itertools
+    pydantic
+    typeguard
+  ];
 
   nativeCheckInputs = [ pytestCheckHook ];
 
