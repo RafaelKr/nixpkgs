@@ -1,6 +1,7 @@
 { lib
 , stdenv
 , fetchurl
+, fetchpatch2
 , gi-docgen
 , meson
 , ninja
@@ -31,6 +32,14 @@ stdenv.mkDerivation rec {
     url = "mirror://gnome/sources/${pname}/${lib.versions.majorMinor version}/${pname}-${version}.tar.xz";
     hash = "sha256-T4QTpwfNAPhM7jnKSfWMSPxDbwCOqA1lMqw32v0LqWs=";
   };
+
+  patches = [
+    (fetchpatch2 {
+      # Fix tests https://gitlab.gnome.org/GNOME/libshumate/-/merge_requests/236
+      url = "https://gitlab.gnome.org/GNOME/libshumate/-/commit/852615b0df2252ea67f4f82e9ace2fc2794467b3.patch";
+      hash = "sha256-Ksye3zNNYmzP4O+QFDVODXUkFJOLDVMEZNfGXwbxWhs=";
+    })
+  ];
 
   depsBuildBuild = [
     # required to find native gi-docgen when cross compiling
@@ -66,9 +75,7 @@ stdenv.mkDerivation rec {
     "-Ddemos=true"
   ];
 
-  # Disable until upstream resolves tests failing in release builds
-  # https://gitlab.gnome.org/GNOME/libshumate/-/issues/71
-  doCheck = false;
+  doCheck = !stdenv.isDarwin;
 
   checkPhase = ''
     runHook preCheck
