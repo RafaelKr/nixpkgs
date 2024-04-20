@@ -3,11 +3,9 @@
 , cython
 , fetchPypi
 , numpy
-, oldest-supported-numpy
 , packaging
 , pandas
 , patsy
-, pythonAtLeast
 , pythonOlder
 , scipy
 , setuptools
@@ -26,14 +24,17 @@ buildPythonPackage rec {
     hash = "sha256-iQVQFHrTqBzaJPC6GlxAIa3BYBCAvQDhka581v7s1q0=";
   };
 
+  postPatch = ''
+    substituteInPlace pyproject.toml \
+      --replace-fail "numpy>=2.0.0rc1,<3" "numpy"
+  '';
+
   build-system = [
     cython
-    oldest-supported-numpy
+    numpy
     scipy
     setuptools
     setuptools-scm
-  ] ++ lib.optionals (pythonAtLeast "3.12") [
-    numpy
   ];
 
   dependencies = [
