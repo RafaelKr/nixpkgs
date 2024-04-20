@@ -36,7 +36,7 @@
 
 buildPythonPackage rec {
   pname = "sphinx";
-  version = "7.3.6";
+  version = "7.3.7";
   format = "pyproject";
   disabled = pythonOlder "3.9";
 
@@ -51,7 +51,7 @@ buildPythonPackage rec {
       mv tests/roots/test-images/{testimäge,testimæge}.png
       sed -i 's/testimäge/testimæge/g' tests/{test_build*.py,roots/test-images/index.rst}
     '';
-    hash = "sha256-7UXI9XF94XRm4cjFufZ8GtCwR5HQfnPFpjuRoLUk4lU=";
+    hash = "sha256-XGGRWEvd1SbQsK8W5yxDzBd5hlvXcDzr8t5Qa6skH/M=";
   };
 
   nativeBuildInputs = [
