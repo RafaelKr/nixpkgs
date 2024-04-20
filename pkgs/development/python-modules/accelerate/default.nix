@@ -2,6 +2,7 @@
 , lib
 , buildPythonPackage
 , fetchFromGitHub
+, pythonAtLeast
 , pythonOlder
 , pytest7CheckHook
 , setuptools
@@ -73,6 +74,10 @@ buildPythonPackage rec {
 
     # set the environment variable, CC, which conflicts with standard environment
     "test_patch_environment_key_exists"
+  ] ++ lib.optionals (pythonAtLeast "3.12") [
+    # RuntimeError: Dynamo is not supported on Python 3.12+
+    "test_convert_to_fp32"
+    "test_send_to_device_compiles"
   ] ++ lib.optionals (stdenv.isLinux && stdenv.isAarch64) [
     # usual aarch64-linux RuntimeError: DataLoader worker (pid(s) <...>) exited unexpectedly
     "CheckpointTest"
