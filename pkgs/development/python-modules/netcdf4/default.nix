@@ -7,6 +7,7 @@
 , oldest-supported-numpy
 , setuptools
 , wheel
+, certifi
 , numpy
 , zlib
 , netcdf
@@ -38,6 +39,7 @@ buildPythonPackage rec {
   ];
 
   propagatedBuildInputs = [
+    certifi
     cftime
     numpy
     zlib
