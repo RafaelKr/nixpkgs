@@ -2,6 +2,7 @@
 , buildPythonPackage
 , fetchPypi
 , jaraco-classes
+, jaraco-context
 , keyring
 , pytestCheckHook
 , pythonOlder
@@ -27,6 +28,7 @@ buildPythonPackage rec {
 
   propagatedBuildInputs = [
     jaraco-classes
+    jaraco-context
   ];
 
   nativeCheckInputs = [
