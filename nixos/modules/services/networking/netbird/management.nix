@@ -165,7 +165,7 @@ let
       ];
       Owner = {
         Email = "";
-        Password = "";
+        Hash = "";
         Username = "";
       };
     };
