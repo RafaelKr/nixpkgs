@@ -20,7 +20,7 @@
         logLevel = "DEBUG";
         settings = {
           # Use a test encryption key
-          DataStoreEncryptionKey = "test-encryption-key-for-testing";
+          DataStoreEncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
         };
       };
     };
@@ -38,7 +38,8 @@
         relaySecretFile = "/run/secrets/relay-secret";
 
         settings = {
-          DataStoreEncryptionKey = "test-encryption-key-for-testing";
+          # Use a test encryption key
+          DataStoreEncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
         };
       };
 
@@ -63,7 +64,8 @@
         };
 
         settings = {
-          DataStoreEncryptionKey = "test-encryption-key-for-testing";
+          # Use a test encryption key
+          DataStoreEncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
         };
       };
 
