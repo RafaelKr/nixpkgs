@@ -83,7 +83,7 @@ let
     };
 
     Datadir = "${stateDir}/data";
-    DataStoreEncryptionKey = "very-insecure-key";
+    DataStoreEncryptionKey = null;
     StoreConfig = {
       Engine = cfg.store.engine;
     }
@@ -431,7 +431,7 @@ in
           };
 
           Datadir = "''${stateDir}/data";
-          DataStoreEncryptionKey = "very-insecure-key";
+          DataStoreEncryptionKey = null;
           StoreConfig = { Engine = "sqlite"; };
 
           HttpConfig = {
@@ -575,6 +575,14 @@ in
       {
         assertion = !cfg.idp.embedded.enable || cfg.oidcConfigEndpoint == "";
         message = "oidcConfigEndpoint should not be set when using embedded IDP";
+      }
+      {
+        assertion = managementConfig.DataStoreEncryptionKey != null;
+        message = ''
+          services.netbird.server.management.settings.DataStoreEncryptionKey must be set.
+          Generate a key with `openssl rand -base64 32` and provide it as a secret, e.g.
+          management.settings.DataStoreEncryptionKey._secret = "/run/secrets/netbird-datastore-key".
+        '';
       }
     ];
 
