@@ -49,17 +49,10 @@ let
     ];
 
     TURNConfig = {
-      Turns = [
-        {
-          Proto = "udp";
-          URI = "turn:${cfg.turnDomain}:${toString cfg.turnPort}";
-          Username = "netbird";
-          Password = "netbird";
-        }
-      ];
+      Turns = [ ];
 
       CredentialsTTL = "12h";
-      Secret = "not-secure-secret";
+      Secret = null;
       TimeBasedCredentials = false;
     };
 
@@ -397,17 +390,10 @@ in
           ];
 
           TURNConfig = {
-            Turns = [
-              {
-                Proto = "udp";
-                URI = "turn:''${cfg.turnDomain}:3478";
-                Username = "netbird";
-                Password = "netbird";
-              }
-            ];
+            Turns = [ ];
 
             CredentialsTTL = "12h";
-            Secret = "not-secure-secret";
+            Secret = null;
             TimeBasedCredentials = false;
           };
 
@@ -583,6 +569,11 @@ in
           Generate a key with `openssl rand -base64 32` and provide it as a secret, e.g.
           management.settings.DataStoreEncryptionKey._secret = "/run/secrets/netbird-datastore-key".
         '';
+      }
+      {
+        assertion =
+          !managementConfig.TURNConfig.TimeBasedCredentials || managementConfig.TURNConfig.Secret != null;
+        message = "settings.TURNConfig.Secret must be set when TURNConfig.TimeBasedCredentials is enabled";
       }
     ];
 
