@@ -94,12 +94,12 @@ NetBird supports an embedded identity provider for simplified deployments that d
     idp.embedded.enable = true;
 
     settings = {
-      ProviderConfig = {
+      EmbeddedIdP = {
         Owner = {
           Email = "admin@example.com";
           Username = "admin";
-          # Generate with: htpasswd -bnBC 10 "" 'your-password' | tr -d ':\n'
-          Password._secret = "/run/secrets/admin-password-hash";
+          # Generate with: mkpasswd -m bcrypt -R 10   (type the password when prompted)
+          Hash._secret = "/run/secrets/admin-password-hash";
         };
       };
     };
