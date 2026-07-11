@@ -327,7 +327,16 @@ in
     localPlugins = mkOption {
       default = [ ];
       type = listOf package;
-      example = literalExpression "[ pkgs.fosrl-badger pkgs.geoblock ]";
+      example = [
+        pkgs.geoblock
+        pkgs.fetchTraefikPlugin {
+          plugin = "plugindemo";
+          owner = "traefik";
+          version = "0.2.2";
+          hash = "sha256-6MuKVvtHUtWuibjUMZknOEklzaHQUjRYHvXdP2QqE6c=";
+        }
+      ];
+      # TODO mention how to add packages which aren't in nixpkgs yet {#sec-pkgs-fetchers-fetchtraefikplugin}
       description = ''
         List of local plugins to be added to the `localPlugins` attribute in the install configuration. These plugins are usually packaged in Nixpkgs, and are managed by Nix.
       '';
