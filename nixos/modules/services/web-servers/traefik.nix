@@ -45,6 +45,7 @@ let
   cfg = config.services.traefik;
   opt = options.services.traefik;
   json = pkgs.formats.json { };
+  # JSON is considered valid YAML by Traefik.
 
   # check if the option has been changed
   ## isDefault :: String -> bool
@@ -56,8 +57,6 @@ let
     in
     attrByPath (sepPath ++ [ "default" ]) (throw "isDefault failed") opt
     == attrByPath sepPath (throw "isDefault failed") cfg;
-
-  # JSON is considered valid YAML by Traefik.
 in
 {
   imports = [
@@ -67,8 +66,8 @@ in
         "traefik"
         "useEnvSubst"
       ]
-      # TODO link or mention docs
-      "Use `services.traefik.environmentFiles` instead, see docs"
+      # TODO link docs
+      "Use `services.traefik.environmentFiles` instead, see DOCSLINK"
     )
     (mkRenamedOptionModule
       [
@@ -141,9 +140,8 @@ in
         type = path;
         # Ideally default option values would instead be filtered by `options.<option>.highestPrio == (lib.mkOptionDefault {}).priority`
         # TODO exclusivity warning wording
-        # TODO explain that this is passed as `--configfile`
         description = ''
-          Path to Traefik's install configuration file.
+          Path to Traefik's install configuration file, passed to the daemon as `--configfile`
 
           ::: {.note}
           You cannot use this option alongside the declarative install configuration options.
@@ -151,9 +149,14 @@ in
         '';
       };
       settings = mkOption {
-        # TODO add note about `{}` and `null` being filtered, and what to do instead (rather than `{}`, use `true`)
         description = ''
           Install configuration for Traefik, written in Nix.
+
+          ::: {.warning}
+          Empty values (`{}`, `[]`, and `null`) are filtered out by default.
+          Instead of declaring empty but present attributes as `attr = {}`, declare them as `attr = true`.
+          To see exactly how this is handled, look at the default value of `cfg.install.settings`
+          :::
 
           ::: {.note}
           This will be serialized to JSON (which is considered valid YAML) at build, and passed to Traefik as `--configfile`.
@@ -175,12 +178,25 @@ in
             # TODO make sure this properly replaces `mkIf` statement as intended
             experimental.localPlugins = mkOption {
               default =
-                if (cfg.localPlugins != [ ]) then
+                if (cfg.localPluginPackages != [ ]) then
                   lib.listToAttrs (
-                    map (plugin: lib.nameValuePair plugin.plugin { inherit (plugin) moduleName; }) cfg.localPlugins
+                    map (plugin: lib.nameValuePair plugin.plugin { inherit (plugin) moduleName; }) cfg.localPluginPackages
                   )
                 else
-                  [ ];
+                  {};
+              example = {
+                "wasm-plugin-name".settings = {
+                  envs = [ "SECRET_ENV" ];
+                  mounts = [ "/path/to/mount"];
+                };
+              };
+              description = ''
+                Local plugins allow you to use plugins from a local directory, without publishing them to the Traefik plugin catalog.
+
+                ::: {.note}
+                By default, this will create an attribute set from the option `cfg.localPluginPackages`. To add a plugin from a package, use that option instead.
+                :::
+              '';
             };
           };
         };
@@ -217,11 +233,13 @@ in
           ::: {.note}
           You cannot use this option alongside the declarative routing configuration options.
           :::
+
           ::: {.note}
           If declarative routing configuration has been set, it will automatically be serialized to JSON (which is considered valid YAML) at build
           and linked to `/etc/traefik.routing.yml`. The file permissions and directories will be set automatically if `user == traefik`, otherwise
           you are responsible for ensuring those are set before the traefik service starts.
           :::
+
           ::: {.note}
           To avoid this behaviour entirely, prefer setting `install.settings.providers.file.*` directly instead
           :::
@@ -273,6 +291,7 @@ in
         };
         # TODO process `extraFiles` and/or `finalSettings` and validate by json schema,
         # schema available at schemastore.org
+        # Complete as part of separate PR
         description = ''
           Routing configuration files to write. These are symlinked in `services.traefik.routing.dir` upon activation,
           allowing configuration to be upated without restarting the primary daemon.
@@ -293,10 +312,14 @@ in
           will be merged with `cfg.routing.settings.
           This allows other modules to write `enableTraefik` options which are compatible with both `cfg.routing.extraFiles` and `cfg.routing.settings`
 
-          :: note Modules implementing an `enableTraefik` option should list the following in the options description:
-          - The names of `services` added
-          - The names of `extraFiles` created
-          - Whether they provide a router or service only (depends on whether the nixosModule has the information needed to create one)
+          ::: {.note}
+          Modules implementing an `enableTraefik` option should list the following in its description, so that users may override values as needed:
+          - The names of any added:
+            - `extraFiles`
+            - `services`
+            - `routers`
+          - Whether they declare a router, service, or both
+          :::
         '';
         default =
           if (cfg.routing.settings != null) then
@@ -324,7 +347,7 @@ in
         };
       };
     };
-    localPlugins = mkOption {
+    localPluginPackages = mkOption {
       default = [ ];
       type = listOf package;
       example = [
@@ -336,9 +359,12 @@ in
           hash = "sha256-6MuKVvtHUtWuibjUMZknOEklzaHQUjRYHvXdP2QqE6c=";
         }
       ];
-      # TODO mention how to add packages which aren't in nixpkgs yet {#sec-pkgs-fetchers-fetchtraefikplugin}
+      # TODO mention how to add packages which aren't in nixpkgs yet
       description = ''
-        List of local plugins to be added to the `localPlugins` attribute in the install configuration. These plugins are usually packaged in Nixpkgs, and are managed by Nix.
+        List of plugin packages to be added to the `localPlugins` attribute in the install configuration.
+
+        These plugins can be packaged in Nixpkgs, or [fetched directly](#module-services-traefik-plugins-custom)
+        If
       '';
     };
 
@@ -394,7 +420,7 @@ in
         This can be used to give additional permissions, such as the group required by the `docker` provider.
 
         ::: {.note}
-        With the `docker` provider, Traefik manages connection to containers via the Docker socket,
+        With the `docker` routing provider, Traefik manages connection to containers via the Docker socket,
         which requires membership of the `docker` group for write access.
         :::
       '';
@@ -488,12 +514,13 @@ in
       optional (!(builtins.elem "docker" cfg.supplementaryGroups -> config.virtualisation.docker.enable))
         "'services.traefik.supplementaryGroups' contains the 'docker' group, but 'services.docker' is not enabled."
         # TODO check for functionality as intended
-      ++ optional (!builtins.all id (map (plugin: plugin._isTraefikPlugin or false) cfg.localPlugins)) ''
-        Some of the Traefik local plugins in 'services.traefik.localPlugins' may be misconfigured.
+        # TODO does/can this show where the definition location is (i.e. what file of the user's config)?
+      ++ optional (!builtins.all id (map (plugin: plugin._isTraefikPlugin or false) cfg.localPluginPackages)) ''
+        Some of the Traefik local plugins in 'services.traefik.localPluginPackages' may be misconfigured.
         The following paths are built from derivations that do not have the '_isTraefikPlugin' attribute set to 'true':
         - ${
           concatMapStringsSep "\n- " (badPlugin: badPlugin.outPath) (
-            filter (plugin: plugin._isTraefikPlugin or false) cfg.localPlugins
+            filter (plugin: plugin._isTraefikPlugin or false) cfg.localPluginPackages
           )
         }
       '';
@@ -540,7 +567,6 @@ in
       };
     };
 
-    # TODO review mkIf statements to ensure cfg.{user, group} logic functions as expected
     systemd.tmpfiles.settings."10-traefik" = mkMerge [
       (mkIf (cfg.user == "traefik" || cfg.group == "traefik") {
         ${cfg.dataDir}.d = {
@@ -573,14 +599,15 @@ in
           }
         ) cfg.routing.extraFiles)
       ))
-      # TODO does this need to point to the install setting instead?
-      # Answer: probably not. The `cfg.localPlugins` option creates a directory containing symlinks, and `install.settings.localPlugins` tells traefik to load them.
-      (mkIf (cfg.localPlugins != [ ]) {
+      # Symlink package directories (in the nix store) to the `plugins-local` folder
+      # This path is hard coded, and should be placed in the working directory of the process running the Traefik binary.
+      # TODO What happens to old symlinks? it appears they would just pile up indefinitely.
+      (mkIf (cfg.localPluginPackages != [ ]) {
         "${cfg.dataDir}/plugins-local"."L+" = {
           argument = toString (
             pkgs.symlinkJoin {
               name = "traefik-plugins";
-              paths = cfg.localPlugins;
+              paths = cfg.localPluginPackages;
             }
           );
         };

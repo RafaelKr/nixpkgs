@@ -451,7 +451,7 @@ in
 
     services.traefik = {
       enable = true;
-      localPlugins = [ pkgs.fosrl-badger ];
+      localPluginPackages = [ pkgs.fosrl-badger ];
       install.settings = {
         providers.http = {
           endpoint = "http://localhost:${toString finalSettings.server.internal_port}/api/v1/traefik-config";
