@@ -1035,15 +1035,15 @@ This specialised fetcher can build local [Traefik](https://traefik.io) plugins i
 ::::{.example #ex-fetchers-fetchtraefikplugin}
 # Building a Traefik plugin hosted on `plugins.traefik.io`
 
-The following recipe shows how to use `fetchTraefikPlugin` to fetch the `geoblock` Traefik plugin at version `0.3.3`:
+The following recipe shows how to use `fetchTraefikPlugin` to fetch the `plugindemo` Traefik plugin at version v`0.2.2`:
 
 ```nix
 { fetchTraefikPlugin }:
 fetchTraefikPlugin {
-  plugin = "geoblock";
-  owner = "PascalMinder";
-  version = "0.3.3";
-  hash = "sha256-gLhihjsBJEKGzpIwWzu/zmvLJbqnqXsF8ZiJWWKwDIA=";
+  plugin = "plugindemo";
+  owner = "traefik";
+  version = "0.2.2";
+  hash = "sha256-6MuKVvtHUtWuibjUMZknOEklzaHQUjRYHvXdP2QqE6c=";
 }
 ```
 
