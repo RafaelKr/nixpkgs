@@ -17,7 +17,6 @@ let
     package
     ;
   inherit (lib)
-    attrByPath
     concatMapStringsSep
     converge
     filter
@@ -38,7 +37,6 @@ let
     optional
     optionalAttrs
     recursiveUpdate
-    splitStringBy
     types
     ;
 
@@ -46,17 +44,6 @@ let
   opt = options.services.traefik;
   json = pkgs.formats.json { };
   # JSON is considered valid YAML by Traefik.
-
-  # check if the option has been changed
-  ## isDefault :: String -> bool
-  ## eg. isDefault "install.settings" == (cfg.install.settings == opt.install.settings.default)
-  isDefault =
-    attrPathStr:
-    let
-      sepPath = splitStringBy (prev: curr: builtins.elem curr [ "." ]) false attrPathStr;
-    in
-    attrByPath (sepPath ++ [ "default" ]) (throw "isDefault failed") opt
-    == attrByPath sepPath (throw "isDefault failed") cfg;
 in
 {
   imports = [
@@ -452,7 +439,7 @@ in
     assertions = [
       {
         # TODO ensure this works with install.settings being a submodule
-        assertion = (!(isDefault "install.file")) -> isDefault "install.settings";
+        assertion = opt.install.file.highestPrio != 1500 -> opt.install.settings.highestPrio == 1500;
         message = ''
           The 'services.traefik.install.file' and 'services.traefik.install.settings'
           options are mutually exclusive for the Traefik install config.
@@ -461,12 +448,12 @@ in
       }
       {
         assertion =
-          (!(isDefault "install.file"))
+          (opt.install.file.highestPrio != 1500)
           -> (builtins.all (
-            map isDefault [
-              "routing.extraFiles"
-              "routing.dir"
-              "routing.file"
+            isEmpty [
+              cfg.routing.extraFiles
+              cfg.routing.dir
+              cfg.routing.file
             ]
           ));
         message = ''
@@ -474,7 +461,7 @@ in
           The following options have non-default values:
             - ${
               concatMapStringsSep "\n  - " (str: "'services.traefik.routing.${str}'") (
-                filter (attr: !(isDefault "routing.${attr}")) [
+                filter (attr: !(isEmpty cfg.routing."${attr}")) [
                   "extraFiles"
                   "dir"
                   "file"
@@ -485,7 +472,7 @@ in
         '';
       }
       {
-        assertion = !(isDefault "routing.file") -> cfg.routing.dir == null;
+        assertion = cfg.routing.file != null -> cfg.routing.dir == null;
         message = ''
           The 'services.traefik.routing.file' and 'services.traefik.routing.dir' options
           are mutually exclusive for the Traefik routing config. It is recommended to use
