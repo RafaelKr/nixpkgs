@@ -40,7 +40,7 @@ let
   opt = options.services.traefik;
   json = pkgs.formats.json { };
   # Traefik accepts JSON as a valid YAML subset
-  defaultOptPrio = (lib.mkOptionDefault {}).priority;
+  defaultOptPrio = (lib.mkOptionDefault { }).priority;
 in
 {
   imports = [
@@ -165,14 +165,16 @@ in
               default =
                 if (cfg.localPluginPackages != [ ]) then
                   lib.listToAttrs (
-                    map (plugin: lib.nameValuePair plugin.plugin { inherit (plugin) moduleName; }) cfg.localPluginPackages
+                    map (
+                      plugin: lib.nameValuePair plugin.plugin { inherit (plugin) moduleName; }
+                    ) cfg.localPluginPackages
                   )
                 else
-                  {};
+                  { };
               example = {
                 "wasm-plugin-name".settings = {
                   envs = [ "SECRET_ENV" ];
-                  mounts = [ "/path/to/mount"];
+                  mounts = [ "/path/to/mount" ];
                 };
               };
               description = ''
@@ -307,7 +309,7 @@ in
           :::
         '';
         default =
-          if (cfg.routing.settings != {}) then
+          if (cfg.routing.settings != { }) then
             json.generate "traefik-routing-settings.yml" (
               recursiveUpdate cfg.routing.settings (
                 lib.optionalAttrs (cfg.routing.extraFiles != { } && cfg.routing.dir == null) lib.foldAttrs (
@@ -323,7 +325,7 @@ in
         description = ''
           Routing configuration for Traefik, written in Nix.
         '';
-        default = {};
+        default = { };
         example = {
           http.routers."api" = {
             service = "api@internal";
@@ -337,7 +339,8 @@ in
       type = listOf package;
       example = [
         pkgs.geoblock
-        pkgs.fetchTraefikPlugin {
+        pkgs.fetchTraefikPlugin
+        {
           plugin = "plugindemo";
           owner = "traefik";
           version = "0.2.2";
@@ -435,42 +438,44 @@ in
     assertions = [
       {
         # TODO ensure this works with install.settings being a submodule
-        assertion = opt.install.file.highestPrio != defaultOptPrio -> opt.install.settings.highestPrio == defaultOptPrio;
+        assertion =
+          opt.install.file.highestPrio != defaultOptPrio
+          -> opt.install.settings.highestPrio == defaultOptPrio;
         message = ''
           The 'services.traefik.install.file' and 'services.traefik.install.settings'
           options are mutually exclusive for the Traefik install config.
           It is recommended to use 'settings'.
         '';
       }
-      (let
-        isEmpty = a: (a == {} || a == [] || a == null);
-      in
-      {
-        assertion =
-          (opt.install.file.highestPrio != defaultOptPrio)
-          -> (builtins.all
-            isEmpty [
+      (
+        let
+          isEmpty = a: (a == { } || a == [ ] || a == null);
+        in
+        {
+          assertion =
+            (opt.install.file.highestPrio != defaultOptPrio)
+            -> (builtins.all isEmpty [
               cfg.routing.extraFiles
               cfg.routing.dir
               cfg.routing.file
               cfg.routing.settings
-            ]
-          );
-        message = ''
-          None of the routing configuration options may be used if Traefik is being managed imperatively.
-          The following options have non-default values:
-            - ${
-              concatMapStringsSep "\n  - " (str: "'services.traefik.routing.${str}'") (
-                filter (attr: !(isEmpty cfg.routing."${attr}")) [
-                  "extraFiles"
-                  "dir"
-                  "file"
-                  "settings"
-                ]
-              )
-            }
-        '';
-      })
+            ]);
+          message = ''
+            None of the routing configuration options may be used if Traefik is being managed imperatively.
+            The following options have non-default values:
+              - ${
+                concatMapStringsSep "\n  - " (str: "'services.traefik.routing.${str}'") (
+                  filter (attr: !(isEmpty cfg.routing."${attr}")) [
+                    "extraFiles"
+                    "dir"
+                    "file"
+                    "settings"
+                  ]
+                )
+              }
+          '';
+        }
+      )
       {
         assertion = cfg.routing.file != null -> cfg.routing.dir == null;
         message = ''
@@ -480,8 +485,7 @@ in
         '';
       }
       {
-        assertion =
-          cfg.routing.extraFiles != { } && cfg.routing.settings == {} -> cfg.routing.dir != null;
+        assertion = cfg.routing.extraFiles != { } && cfg.routing.settings == { } -> cfg.routing.dir != null;
         message = ''
           'services.traefik.routing.extraFiles' requires the routing file provider to be set
           to a directory. Please set a path for 'services.traefik.routing.dir'.
@@ -499,10 +503,10 @@ in
 
     warnings =
       optional (!(builtins.elem "docker" cfg.supplementaryGroups -> config.virtualisation.docker.enable))
-      # TODO wording of "is this intentional"
+        # TODO wording of "is this intentional"
         "'services.traefik.supplementaryGroups' contains the 'docker' group, but 'virtualisation.docker.enable' is not enabled. If this is intentional, please open an issue notifying the traefik maintainers"
-        # TODO check for functionality as intended
-        # TODO does/can this show where the definition location is (i.e. what file of the user's config)?
+      # TODO check for functionality as intended
+      # TODO does/can this show where the definition location is (i.e. what file of the user's config)?
       ++ optional (!(builtins.all (plugin: plugin._isTraefikPlugin or false) cfg.localPluginPackages)) ''
         Some of the Traefik local plugins in 'services.traefik.localPluginPackages' may be misconfigured.
         The following paths are built from derivations that do not have the '_isTraefikPlugin' attribute set to 'true':
