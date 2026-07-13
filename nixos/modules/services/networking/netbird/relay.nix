@@ -21,7 +21,6 @@ let
   inherit (lib.types)
     bool
     listOf
-    nullOr
     enum
     path
     port
@@ -43,7 +42,7 @@ in
       default = 33080;
       description = ''
         Port the relay server listens on.
-        When behind nginx (enableNginx), this is the internal port that nginx proxies to.
+        When served behind an ingress, this is the internal port it proxies to.
       '';
     };
 
@@ -104,14 +103,6 @@ in
       '';
     };
 
-    enableNginx = mkEnableOption "Nginx reverse-proxy for the relay server";
-
-    domain = mkOption {
-      type = nullOr str;
-      default = null;
-      description = "Domain name for nginx virtual host configuration.";
-    };
-
     metricsPort = mkOption {
       type = port;
       default = 9092;
@@ -131,13 +122,6 @@ in
 
   config = mkIf cfg.enable (mkMerge [
     {
-      assertions = [
-        {
-          assertion = cfg.enableNginx -> cfg.domain != null;
-          message = "domain must be set when enableNginx is true";
-        }
-      ];
-
       systemd.services.netbird-relay = {
         description = "NetBird Relay Server";
         documentation = [ "https://docs.netbird.io/" ];
@@ -217,32 +201,19 @@ in
 
         stopIfChanged = false;
       };
+
+      # NetBird relay route (v0.74.6): "/relay" -> WebSocket.
+      # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L861-L867
+      services.netbird.server.ingressRoutes.relay-ws = {
+        path = "/relay";
+        backend.websocket.upstream = "127.0.0.1:${toString cfg.port}";
+      };
     }
 
     (mkIf cfg.openFirewall {
       networking.firewall = {
         allowedTCPPorts = [ cfg.port ];
         allowedUDPPorts = mkIf cfg.stun.enable cfg.stun.ports;
-      };
-    })
-
-    (mkIf cfg.enableNginx {
-      services.nginx = {
-        enable = true;
-
-        virtualHosts.${cfg.domain} = {
-          locations."/relay".extraConfig = ''
-            proxy_pass http://127.0.0.1:${toString cfg.port};
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_read_timeout 86400;
-          '';
-        };
       };
     })
   ]);

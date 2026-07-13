@@ -74,6 +74,9 @@
   "module-services-netbird-server-complete-example": [
     "index.html#module-services-netbird-server-complete-example"
   ],
+  "module-services-netbird-server-components": [
+    "index.html#module-services-netbird-server-components"
+  ],
   "module-services-netbird-server-database": [
     "index.html#module-services-netbird-server-database"
   ],
@@ -82,6 +85,12 @@
   ],
   "module-services-netbird-server-embedded-idp": [
     "index.html#module-services-netbird-server-embedded-idp"
+  ],
+  "module-services-netbird-server-global": [
+    "index.html#module-services-netbird-server-global"
+  ],
+  "module-services-netbird-server-ingress": [
+    "index.html#module-services-netbird-server-ingress"
   ],
   "module-services-netbird-server-quickstart-coturn": [
     "index.html#module-services-netbird-server-quickstart-coturn"
