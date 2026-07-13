@@ -6,7 +6,7 @@
   name = "netbird-server-management";
 
   meta.maintainers = with lib.maintainers; [
-    shuuri-labs
+    RafaelKr
   ];
 
   nodes = {
