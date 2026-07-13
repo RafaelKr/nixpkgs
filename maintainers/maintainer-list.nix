@@ -22738,6 +22738,12 @@
     githubId = 1016742;
     name = "Rafael García";
   };
+  RafaelKr = {
+    email = "14234815+RafaelKr@users.noreply.github.com";
+    github = "RafaelKr";
+    githubId = 14234815;
+    name = "Rafael Kraut";
+  };
   rafaelrc = {
     email = "contact@rafaelrc.com";
     name = "Rafael Carvalho";
@@ -25357,12 +25363,6 @@
     name = "Shun Ueda";
     github = "shunueda";
     githubId = 62182668;
-  };
-  shuuri-labs = {
-    name = "Ashley Mensah";
-    email = "ashley@netbird.io";
-    github = "shuuri-labs";
-    githubId = 61762328;
   };
   shved = {
     name = "Yury Shvedov";

@@ -6,7 +6,7 @@
   name = "netbird-server-relay";
 
   meta.maintainers = with lib.maintainers; [
-    shuuri-labs
+    RafaelKr
   ];
 
   nodes = {
