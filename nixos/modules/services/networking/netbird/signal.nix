@@ -38,8 +38,6 @@ in
 
     package = mkPackageOption pkgs "netbird-signal" { };
 
-    enableNginx = mkEnableOption "Nginx reverse-proxy for the netbird signal service";
-
     domain = mkOption {
       type = str;
       description = "The domain name for the signal service.";
@@ -214,23 +212,11 @@ in
       allowedTCPPorts = [ cfg.port ];
     };
 
-    services.nginx = mkIf cfg.enableNginx {
-      enable = true;
-
-      virtualHosts.${cfg.domain} = {
-        locations."/signalexchange.SignalExchange/".extraConfig = ''
-          # This is necessary so that grpc connections do not get closed early
-          # see https://stackoverflow.com/a/67805465
-          client_body_timeout 1d;
-
-          grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
-          grpc_pass grpc://localhost:${toString cfg.port};
-          grpc_read_timeout 1d;
-          grpc_send_timeout 1d;
-          grpc_socket_keepalive on;
-        '';
-      };
+    # NetBird signal route (v0.74.6): "/signalexchange.SignalExchange/" -> gRPC (h2c).
+    # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L854-L860
+    services.netbird.server.ingressRoutes.signal-grpc = {
+      path = "/signalexchange.SignalExchange/";
+      backend.grpc.upstream = "127.0.0.1:${toString cfg.port}";
     };
   };
 }

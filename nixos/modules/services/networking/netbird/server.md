@@ -17,7 +17,7 @@ This is the traditional setup using Coturn as the TURN server:
 
     domain = "netbird.example.selfhosted";
 
-    enableNginx = true;
+    ingress.nginx.enable = true;
 
     coturn = {
       enable = true;
@@ -55,7 +55,7 @@ NetBird v0.28+ introduced a modern relay server that replaces Coturn with better
 
     domain = "netbird.example.selfhosted";
 
-    enableNginx = true;
+    ingress.nginx.enable = true;
 
     # Use the modern relay instead of Coturn
     useRelay = true;
@@ -68,7 +68,47 @@ NetBird v0.28+ introduced a modern relay server that replaces Coturn with better
 }
 ```
 
-## Relay vs Coturn {#module-services-netbird-server-relay-vs-coturn}
+## Global settings {#module-services-netbird-server-global}
+
+`enable` turns on the dashboard, management API and signal service; the relay and coturn are enabled separately.
+`domain` names the host the server is reached at, and every component derives its own defaults from it.
+
+```nix
+{
+  services.netbird.server = {
+    enable = true;
+    domain = "netbird.example.selfhosted";
+  };
+}
+```
+
+## The ingress {#module-services-netbird-server-ingress}
+
+The ingress terminates TLS for `domain` and routes each plane — dashboard, management API and gRPC, signal, relay — to the component that serves it.
+NetBird's own documentation calls this the [external reverse proxy](https://docs.netbird.io/selfhosted/external-reverse-proxy).
+
+`ingress` is a tagged union, so exactly one backend is selected.
+Enable it and configure the virtual host through the backend's own `settings`:
+
+```nix
+{
+  services.netbird.server.ingress.nginx = {
+    enable = true;
+    settings = {
+      enableACME = true;
+      forceSSL = true;
+    };
+  };
+}
+```
+
+Leave `ingress` unset to run the components without a bundled front, for example when something else on the network already terminates TLS and forwards to them.
+
+## Components {#module-services-netbird-server-components}
+
+The sections below configure the individual NetBird components.
+
+### Relay vs Coturn {#module-services-netbird-server-relay-vs-coturn}
 
 | Feature | Relay Server | Coturn |
 |---------|--------------|--------|
@@ -80,7 +120,7 @@ NetBird v0.28+ introduced a modern relay server that replaces Coturn with better
 
 **Recommendation:** Use the relay server for new deployments. Only use Coturn if you have specific requirements for standard TURN protocol compatibility.
 
-## Embedded Identity Provider {#module-services-netbird-server-embedded-idp}
+### Embedded Identity Provider {#module-services-netbird-server-embedded-idp}
 
 NetBird supports an embedded identity provider for simplified deployments that don't require an external SSO. Enable it with `idp.embedded.enable`, then customize via the freeform `settings` option:
 
@@ -107,11 +147,11 @@ NetBird supports an embedded identity provider for simplified deployments that d
 }
 ```
 
-## Database Backends {#module-services-netbird-server-database}
+### Database Backends {#module-services-netbird-server-database}
 
 By default, the management server uses SQLite. For larger deployments, PostgreSQL or MySQL is recommended.
 
-### PostgreSQL {#module-services-netbird-server-database-postgres}
+#### PostgreSQL {#module-services-netbird-server-database-postgres}
 
 ```nix
 {
@@ -138,7 +178,7 @@ By default, the management server uses SQLite. For larger deployments, PostgreSQ
 }
 ```
 
-## Relay Server Configuration {#module-services-netbird-server-relay-config}
+### Relay Server Configuration {#module-services-netbird-server-relay-config}
 
 The relay server can be configured independently. Advanced TLS settings (Let's Encrypt, custom certificates) can be passed via `extraOptions`:
 
@@ -156,7 +196,7 @@ The relay server can be configured independently. Advanced TLS settings (Let's E
 
     openFirewall = true;
 
-    # For direct TLS (without nginx reverse proxy):
+    # For direct TLS (without an nginx ingress):
     extraOptions = [
       "--tls-cert-file"
       "/path/to/cert.pem"
@@ -178,7 +218,14 @@ Here's a complete example using the modern relay server with an external identit
   services.netbird.server = {
     enable = true;
     domain = "netbird.example.com";
-    enableNginx = true;
+
+    ingress.nginx = {
+      enable = true;
+      settings = {
+        enableACME = true;
+        forceSSL = true;
+      };
+    };
 
     useRelay = true;
     relayAuthSecretFile = "/run/secrets/netbird/relay-auth";
@@ -195,12 +242,6 @@ Here's a complete example using the modern relay server with an external identit
       AUTH_AUTHORITY = "https://auth.example.com";
       AUTH_CLIENT_ID = "netbird-dashboard";
     };
-  };
-
-  # Configure Nginx with ACME
-  services.nginx.virtualHosts."netbird.example.com" = {
-    enableACME = true;
-    forceSSL = true;
   };
 
   security.acme = {

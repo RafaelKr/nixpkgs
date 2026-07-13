@@ -39,8 +39,6 @@ in
 
     package = mkPackageOption pkgs "netbird-dashboard" { };
 
-    enableNginx = mkEnableOption "Nginx reverse-proxy to serve the dashboard";
-
     domain = mkOption {
       type = str;
       default = "localhost";
@@ -164,24 +162,11 @@ in
           '';
     };
 
-    services.nginx = mkIf cfg.enableNginx {
-      enable = true;
-
-      virtualHosts.${cfg.domain} = {
-        root = cfg.finalDrv;
-
-        locations = {
-          "/".tryFiles = "$uri $uri.html $uri/ =404";
-
-          "= /404.html".extraConfig = ''
-            internal;
-          '';
-        };
-
-        extraConfig = ''
-          error_page 404 /404.html;
-        '';
-      };
+    # NetBird dashboard route (v0.74.6): "/" catch-all -> static frontend.
+    # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L827-L832
+    services.netbird.server.ingressRoutes.dashboard = {
+      path = "/";
+      backend.static.root = cfg.finalDrv;
     };
   };
 }

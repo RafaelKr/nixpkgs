@@ -498,8 +498,6 @@ in
       default = "INFO";
       description = "Log level of the netbird services.";
     };
-
-    enableNginx = mkEnableOption "Nginx reverse-proxy for the netbird management service";
   };
 
   config = mkIf cfg.enable {
@@ -665,26 +663,28 @@ in
       stopIfChanged = false;
     };
 
-    services.nginx = mkIf cfg.enableNginx {
-      enable = true;
+    services.netbird.server.ingressRoutes = {
+      # NetBird management API route (v0.74.6): "/api" -> HTTP (backend router).
+      # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L861-L867
+      management-api = {
+        path = "/api";
+        backend.proxy.upstream = "127.0.0.1:${toString cfg.port}";
+      };
 
-      virtualHosts.${cfg.domain} = {
-        locations = {
-          "/api".proxyPass = "http://localhost:${toString cfg.port}";
-
-          "/management.ManagementService/".extraConfig = ''
-            # This is necessary so that grpc connections do not get closed early
-            # see https://stackoverflow.com/a/67805465
-            client_body_timeout 1d;
-
-            grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
-            grpc_pass grpc://localhost:${toString cfg.port};
-            grpc_read_timeout 1d;
-            grpc_send_timeout 1d;
-            grpc_socket_keepalive on;
-          '';
-        };
+      # NetBird management gRPC route (v0.74.6): "/management.ManagementService/" -> gRPC (h2c).
+      # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L854-L860
+      management-grpc = {
+        path = "/management.ManagementService/";
+        backend.grpc.upstream = "127.0.0.1:${toString cfg.port}";
+      };
+    }
+    // optionalAttrs cfg.idp.embedded.enable {
+      # The embedded IdP is served by the management server under /oauth2.
+      # NetBird route (v0.74.6): "/oauth2" -> HTTP (backend router).
+      # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L861-L867
+      management-oauth2 = {
+        path = "/oauth2";
+        backend.proxy.upstream = "127.0.0.1:${toString cfg.port}";
       };
     };
   };
