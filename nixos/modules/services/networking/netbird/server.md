@@ -149,7 +149,7 @@ NetBird supports an embedded identity provider for simplified deployments that d
 
 ### Database Backends {#module-services-netbird-server-database}
 
-By default, the management server uses SQLite. For larger deployments, PostgreSQL or MySQL is recommended.
+By default, the management server uses SQLite. For larger deployments, set `store.engine` to `postgres` or `mysql` and point `store.dsnFile` at the connection DSN; the DSN is passed to netbird-mgmt as a systemd credential and never written to the Nix store.
 
 #### PostgreSQL {#module-services-netbird-server-database-postgres}
 
@@ -158,12 +158,12 @@ By default, the management server uses SQLite. For larger deployments, PostgreSQ
   services.netbird.server.management = {
     store = {
       engine = "postgres";
-      postgres.dsnFile = "/run/secrets/postgres-dsn";
+      dsnFile = "/run/secrets/postgres-dsn";
     };
   };
 
   # Example DSN file content:
-  # postgres://netbird:password@localhost:5432/netbird?sslmode=disable
+  # host=localhost user=netbird dbname=netbird
 
   services.postgresql = {
     enable = true;
@@ -175,6 +175,22 @@ By default, the management server uses SQLite. For larger deployments, PostgreSQ
       }
     ];
   };
+}
+```
+
+#### MySQL {#module-services-netbird-server-database-mysql}
+
+```nix
+{
+  services.netbird.server.management = {
+    store = {
+      engine = "mysql";
+      dsnFile = "/run/secrets/mysql-dsn";
+    };
+  };
+
+  # Example DSN file content:
+  # netbird:password@tcp(localhost:3306)/netbird
 }
 ```
 
