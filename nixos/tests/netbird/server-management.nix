@@ -9,6 +9,10 @@
     RafaelKr
   ];
 
+  # Geolocation downloads a database on startup, which fails in the sandboxed
+  # (network-isolated) test VMs; disable it for every node.
+  defaults.services.netbird.server.management.environment.NB_DISABLE_GEOLOCATION = true;
+
   nodes = {
     management = {
       services.netbird.server.management = {
@@ -60,7 +64,7 @@
 
         store = {
           engine = "postgres";
-          postgres.dsnFile = "/run/secrets/postgres-dsn";
+          dsnFile = "/etc/netbird/store-dsn";
         };
 
         settings = {
@@ -68,6 +72,11 @@
           DataStoreEncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
         };
       };
+
+      # LoadCredential reads the DSN before the unit starts, so it must exist
+      # up front rather than being written in preStart.
+      environment.etc."netbird/store-dsn".text =
+        "host=/run/postgresql user=netbird dbname=netbird sslmode=disable";
 
       services.postgresql = {
         enable = true;
@@ -78,17 +87,52 @@
             ensureDBOwnership = true;
           }
         ];
+        # Let the management service connect over the peer socket without a password.
+        authentication = lib.mkForce "local all all trust";
       };
 
       systemd.services.netbird-management = {
         after = [ "postgresql.service" ];
         requires = [ "postgresql.service" ];
-        preStart = lib.mkBefore ''
-          mkdir -p /run/secrets
-          echo "postgres://netbird@localhost/netbird?sslmode=disable" > /run/secrets/postgres-dsn
-        '';
       };
     };
+
+    managementWithMysql =
+      { pkgs, ... }:
+      {
+        services.netbird.server.management = {
+          enable = true;
+          domain = "mgmt-my.test";
+          turnDomain = "turn.test";
+          port = 8011;
+          metricsPort = 9090;
+
+          store = {
+            engine = "mysql";
+            dsnFile = "/etc/netbird/store-dsn";
+          };
+
+          settings = {
+            # Use a test encryption key
+            DataStoreEncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+          };
+        };
+
+        # netbird-mgmt runs as root, so connect as the socket-authenticated root
+        # user (go-sql-driver accepts a unix(...) DSN).
+        environment.etc."netbird/store-dsn".text = "root@unix(/run/mysqld/mysqld.sock)/netbird";
+
+        services.mysql = {
+          enable = true;
+          package = pkgs.mariadb;
+          ensureDatabases = [ "netbird" ];
+        };
+
+        systemd.services.netbird-management = {
+          after = [ "mysql.service" ];
+          requires = [ "mysql.service" ];
+        };
+      };
   };
 
   testScript = ''
@@ -106,6 +150,11 @@
     # Verify config file was generated
     management.succeed("test -f /var/lib/netbird-mgmt/management.json")
 
+    # Verify the default store selects the sqlite engine
+    management.succeed(
+        "grep -qE '\"Engine\":[[:space:]]*\"sqlite\"' /var/lib/netbird-mgmt/management.json"
+    )
+
     # Test management with relay configuration
     managementWithRelay.wait_for_unit("netbird-management.service")
     managementWithRelay.wait_for_open_port(8011)
@@ -120,6 +169,18 @@
     managementWithPostgres.wait_for_open_port(8011)
 
     # Verify postgres engine is in config
-    managementWithPostgres.succeed("grep -q 'postgres' /var/lib/netbird-mgmt/management.json")
+    managementWithPostgres.succeed(
+        "grep -qE '\"Engine\":[[:space:]]*\"postgres\"' /var/lib/netbird-mgmt/management.json"
+    )
+
+    # Test management with MySQL
+    managementWithMysql.wait_for_unit("mysql.service")
+    managementWithMysql.wait_for_unit("netbird-management.service")
+    managementWithMysql.wait_for_open_port(8011)
+
+    # Verify mysql engine is in config
+    managementWithMysql.succeed(
+        "grep -qE '\"Engine\":[[:space:]]*\"mysql\"' /var/lib/netbird-mgmt/management.json"
+    )
   '';
 }

@@ -80,6 +80,9 @@
   "module-services-netbird-server-database": [
     "index.html#module-services-netbird-server-database"
   ],
+  "module-services-netbird-server-database-mysql": [
+    "index.html#module-services-netbird-server-database-mysql"
+  ],
   "module-services-netbird-server-database-postgres": [
     "index.html#module-services-netbird-server-database-postgres"
   ],

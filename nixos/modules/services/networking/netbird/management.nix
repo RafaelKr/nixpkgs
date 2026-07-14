@@ -9,9 +9,13 @@
 let
   inherit (lib)
     any
+    boolToString
     concatMap
+    escapeShellArgs
     getExe'
+    isBool
     literalExpression
+    mapAttrs
     mkEnableOption
     mkIf
     mkOption
@@ -19,24 +23,51 @@ let
     optional
     optionals
     optionalAttrs
+    optionalString
     recursiveUpdate
     ;
 
   inherit (lib.types)
+    attrsOf
     bool
+    either
     enum
     listOf
     nullOr
     path
     port
     str
+    submodule
     ;
 
-  inherit (utils) escapeSystemdExecArgs genJqSecretsReplacementSnippet;
+  inherit (utils) genJqSecretsReplacementSnippet;
 
   stateDir = "/var/lib/netbird-mgmt";
 
   settingsFormat = pkgs.formats.json { };
+
+  # netbird-mgmt reads the SQL DSN only from a per-engine env var, never from
+  # management.json. Follow the *effective* engine (settings.StoreConfig.Engine
+  # overrides store.engine via recursiveUpdate) so the DSN is wired for the same
+  # engine that lands in the rendered config; null unless a dsnFile is provided.
+  storeDsn =
+    let
+      engine = managementConfig.StoreConfig.Engine;
+    in
+    if cfg.store.dsnFile == null then
+      null
+    else if engine == "postgres" then
+      {
+        env = "NB_STORE_ENGINE_POSTGRES_DSN";
+        file = cfg.store.dsnFile;
+      }
+    else if engine == "mysql" then
+      {
+        env = "NB_STORE_ENGINE_MYSQL_DSN";
+        file = cfg.store.dsnFile;
+      }
+    else
+      null;
 
   defaultSettings = {
     Stuns = [
@@ -77,19 +108,7 @@ let
 
     Datadir = "${stateDir}/data";
     DataStoreEncryptionKey = null;
-    StoreConfig = {
-      Engine = cfg.store.engine;
-    }
-    // optionalAttrs (cfg.store.engine == "postgres" && cfg.store.postgres.dsnFile != null) {
-      DataSourcePath = {
-        _secret = cfg.store.postgres.dsnFile;
-      };
-    }
-    // optionalAttrs (cfg.store.engine == "mysql" && cfg.store.mysql.dsnFile != null) {
-      DataSourcePath = {
-        _secret = cfg.store.mysql.dsnFile;
-      };
-    };
+    StoreConfig.Engine = cfg.store.engine;
 
     HttpConfig = {
       Address = "127.0.0.1:${toString cfg.port}";
@@ -254,6 +273,30 @@ in
       description = "Disables push of anonymous usage metrics to NetBird.";
     };
 
+    environment = mkOption {
+      type = submodule {
+        freeformType = attrsOf (either str bool);
+        options.NB_DISABLE_GEOLOCATION = mkOption {
+          type = nullOr bool;
+          default = null;
+          description = ''
+            Disable the GeoLite2 geolocation service. When geolocation is left
+            enabled (the NetBird default), netbird-management downloads the
+            GeoLite2-City database on startup and fails to start without network
+            access or a database pre-provisioned in its data directory. Set to
+            `true` for air-gapped deployments.
+          '';
+        };
+      };
+      default = { };
+      description = ''
+        Extra environment variables for the netbird-management service (NetBird
+        reads `NB_*` variables). Do not put secrets here, as they would be
+        world-readable in the unit; use the dedicated secret options such as
+        `store.dsnFile` instead.
+      '';
+    };
+
     port = mkOption {
       type = port;
       default = 8011;
@@ -347,31 +390,25 @@ in
         ];
         default = "sqlite";
         description = ''
-          Database engine for the management server.
-          Use postgres or mysql for larger deployments.
+          Database engine for the management store, rendered to NetBird's
+          `StoreConfig.Engine`. `sqlite` keeps the database in the management
+          state directory; `postgres` and `mysql` connect using {option}`dsnFile`.
         '';
       };
 
-      postgres = {
-        dsnFile = mkOption {
-          type = nullOr path;
-          default = null;
-          description = ''
-            Path to file containing the PostgreSQL connection DSN.
-            Example content: postgres://user:password@localhost:5432/netbird?sslmode=disable
-          '';
-        };
-      };
+      dsnFile = mkOption {
+        type = nullOr path;
+        default = null;
+        description = ''
+          Path to a file containing the connection DSN for the `postgres` or
+          `mysql` engine (NetBird reads it from `NB_STORE_ENGINE_<ENGINE>_DSN`).
+          It is passed to netbird-mgmt as a systemd credential, so the DSN stays
+          out of the Nix store and the unit environment. Unused for `sqlite`.
 
-      mysql = {
-        dsnFile = mkOption {
-          type = nullOr path;
-          default = null;
-          description = ''
-            Path to file containing the MySQL connection DSN.
-            Example content: user:password@tcp(localhost:3306)/netbird
-          '';
-        };
+          Example (postgres): `host=localhost user=netbird dbname=netbird`
+
+          Example (mysql): `netbird:password@tcp(localhost:3306)/netbird`
+        '';
       };
     };
 
@@ -527,9 +564,25 @@ in
               && builtins.isString (managementConfig.Relay.Secret or "");
             name = "The Relay.Secret";
           }
-        ];
+        ]
+      ++
+        optional (cfg.environment.NB_DISABLE_GEOLOCATION != true)
+          "netbird-management: geolocation is enabled; it downloads the GeoLite2-City database on startup and fails to start without network access or a database pre-provisioned in its data directory. Set services.netbird.server.management.environment.NB_DISABLE_GEOLOCATION = true for air-gapped deployments."
+      ++
+        optional
+          (
+            (cfg.settings.StoreConfig.Engine or null) != null
+            && cfg.settings.StoreConfig.Engine != cfg.store.engine
+          )
+          "netbird-management: settings.StoreConfig.Engine (${
+            cfg.settings.StoreConfig.Engine or ""
+          }) overrides store.engine (${cfg.store.engine}); the settings value wins and drives the DSN credential. Set store.engine instead of overriding it via settings.";
 
     assertions = [
+      {
+        assertion = managementConfig.StoreConfig.Engine == "sqlite" || cfg.store.dsnFile != null;
+        message = "services.netbird.server.management.store.dsnFile is required for the '${managementConfig.StoreConfig.Engine}' store engine.";
+      }
       {
         assertion = cfg.port != cfg.metricsPort;
         message = "The primary listen port cannot be the same as the listen port for the metrics endpoint";
@@ -547,14 +600,6 @@ in
       {
         assertion = cfg.tls.certKey != null -> cfg.tls.certFile != null;
         message = "certFile must be set when certKey is set";
-      }
-      {
-        assertion = cfg.store.engine == "postgres" -> cfg.store.postgres.dsnFile != null;
-        message = "store.postgres.dsnFile must be set when using postgres engine";
-      }
-      {
-        assertion = cfg.store.engine == "mysql" -> cfg.store.mysql.dsnFile != null;
-        message = "store.mysql.dsnFile must be set when using mysql engine";
       }
       {
         assertion = !cfg.idp.embedded.enable || cfg.oidcConfigEndpoint == "";
@@ -585,52 +630,67 @@ in
 
       preStart = genJqSecretsReplacementSnippet managementConfig "${stateDir}/management.json";
 
+      environment = mapAttrs (_: value: if isBool value then boolToString value else value) (
+        removeAttrs cfg.environment [ "_module" ]
+      );
+
       serviceConfig = {
-        ExecStart = escapeSystemdExecArgs (
-          [
-            (getExe' cfg.package "netbird-mgmt")
-            "management"
-            "--config"
-            "${stateDir}/management.json"
-            "--datadir"
-            "${stateDir}/data"
-            "--dns-domain"
-            cfg.dnsDomain
-            "--port"
-            cfg.port
-            "--metrics-port"
-            cfg.metricsPort
-            "--log-file"
-            "console"
-            "--log-level"
-            cfg.logLevel
-            "--idp-sign-key-refresh-enabled"
-          ]
-          # Single account mode
-          ++ optionals cfg.singleAccountMode.enable [
-            "--single-account-mode-domain"
-            cfg.singleAccountMode.domain
-          ]
-          ++ (optional (!cfg.singleAccountMode.enable) "--disable-single-account-mode")
-          ++ (optional cfg.disableAnonymousMetrics "--disable-anonymous-metrics")
-          # Always disable GeoLite updates for self-hosted (privacy default)
-          ++ [ "--disable-geolite-update" ]
-          # TLS options
-          ++ optionals (cfg.tls.letsencrypt.domain != null) [
-            "--letsencrypt-domain"
-            cfg.tls.letsencrypt.domain
-          ]
-          ++ optionals (cfg.tls.certFile != null) [
-            "--cert-file"
-            cfg.tls.certFile
-          ]
-          ++ optionals (cfg.tls.certKey != null) [
-            "--cert-key"
-            cfg.tls.certKey
-          ]
-          ++ cfg.extraOptions
-        );
+        ExecStart =
+          let
+            args = [
+              (getExe' cfg.package "netbird-mgmt")
+              "management"
+              "--config"
+              "${stateDir}/management.json"
+              "--datadir"
+              "${stateDir}/data"
+              "--dns-domain"
+              cfg.dnsDomain
+              "--port"
+              cfg.port
+              "--metrics-port"
+              cfg.metricsPort
+              "--log-file"
+              "console"
+              "--log-level"
+              cfg.logLevel
+              "--idp-sign-key-refresh-enabled"
+            ]
+            # Single account mode
+            ++ optionals cfg.singleAccountMode.enable [
+              "--single-account-mode-domain"
+              cfg.singleAccountMode.domain
+            ]
+            ++ (optional (!cfg.singleAccountMode.enable) "--disable-single-account-mode")
+            ++ (optional cfg.disableAnonymousMetrics "--disable-anonymous-metrics")
+            # Always disable GeoLite updates for self-hosted (privacy default)
+            ++ [ "--disable-geolite-update" ]
+            # TLS options
+            ++ optionals (cfg.tls.letsencrypt.domain != null) [
+              "--letsencrypt-domain"
+              cfg.tls.letsencrypt.domain
+            ]
+            ++ optionals (cfg.tls.certFile != null) [
+              "--cert-file"
+              cfg.tls.certFile
+            ]
+            ++ optionals (cfg.tls.certKey != null) [
+              "--cert-key"
+              cfg.tls.certKey
+            ]
+            ++ cfg.extraOptions;
+          in
+          # The SQL DSN is a secret and netbird-mgmt only reads it from an env
+          # var, so export it from a systemd credential at runtime instead of
+          # baking it into the world-readable store or unit environment.
+          "${pkgs.writeShellScript "netbird-management" ''
+            ${optionalString (storeDsn != null) ''
+              export ${storeDsn.env}="$(< "$CREDENTIALS_DIRECTORY/store-dsn")"
+            ''}
+            exec ${escapeShellArgs args}
+          ''}";
         Restart = "always";
+        LoadCredential = optional (storeDsn != null) "store-dsn:${storeDsn.file}";
         RuntimeDirectory = "netbird-mgmt";
         StateDirectory = [
           "netbird-mgmt"
