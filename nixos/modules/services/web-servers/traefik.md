@@ -46,7 +46,7 @@ When using the structured `settings` configuration options, the Traefik module
 supports [plugins][upstream-3]. Plugins in Traefik are an additional routing
 configuration source and can programatically set up routes and proxies.
 
-The {option}`services.traefik.plugins` option takes in a list of derivations
+The {option}`services.traefik.localPluginPackages` option takes in a list of derivations
 that contain Traefik plugins. Some plugins are available in the package set, and
 can be called directly from `pkgs`. The example below sets up `geoblock`, a
 Traefik plugin that blocks connections from a given list of countries based on
@@ -55,7 +55,7 @@ the client's IP address, to block all connections not coming from the Netherland
 ```nix
 {
   services.traefik = {
-    plugins = [ pkgs.geoblock ];
+    localPluginPackages = [ pkgs.geoblock ];
     install.settings.entryPoints.websecure.http.middlewares = "my-geoblock";
     routing.settings.http.middlewares.my-geoblock.plugin.geoblock.countries = [ "NL" ];
   };
@@ -65,13 +65,13 @@ the client's IP address, to block all connections not coming from the Netherland
 ### Custom Plugins {#module-services-traefik-plugins-custom}
 
 Plugins that are not currently packaged in Nixpkgs can also be added to the
-{option}`services.traefik.plugins` option after being built with the
+{option}`services.traefik.localPluginPackages` option after being built with the
 `fetchTraefikPlugin` builder. See the [Nixpkgs manual section on
 `fetchTraefikPlugin`][fetcher] for more information on the available options.
 
 ```nix
 {
-  services.traefik.plugins = [
+  services.traefik.localPluginPackages = [
     (pkgs.fetchTraefikPlugin {
       plugin = "example";
       owner = "example-author";
@@ -90,7 +90,7 @@ derivation to include the `_isTraefikPlugin` attribute.
 
 ```nix
 {
-  services.traefik.plugins = [
+  services.traefik.localPluginPackages = [
     (
       (lib.fileset.toSource {
         root = ./my-plugin;
