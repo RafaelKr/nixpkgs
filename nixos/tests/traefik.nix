@@ -56,9 +56,8 @@
       };
 
     # Test objectives:
-    # - Declarative install/routing configuration through routing.settings (is this actually being loaded by traefik?)
-    # - Auto merge of dangling `routing.extraFiles` (has the merge logic been foiled somehow?)
-    #   - Do multiple extraFiles get merged properly (without overwriting eachother)
+    # - Declarative routing through routing.settings, served as a single generated file (file mode
+    #   chosen by the content-sensing default when no provider is set)
     "declare" = {
       services.traefik = {
         enable = true;
@@ -75,63 +74,64 @@
             }
           ];
         };
-
-        routing.extraFiles = {
-          "extrahttp1".settings = {
-            http.routers."extrahttp1" = {
-              rule = "Host(`extrahttp1.declare`)";
-              entryPoints = [ "web" ];
-              service = "extrahttp1";
-            };
-
-            http.services."extrahttp1".loadBalancer.servers = [
-              {
-                url = "http://simplehttp";
-              }
-            ];
-          };
-          "extrahttp2".settings = {
-            http.routers."extrahttp2" = {
-              rule = "Host(`extrahttp2.declare`)";
-              entryPoints = [ "web" ];
-              service = "extrahttp2";
-            };
-
-            http.services."extrahttp2".loadBalancer.servers = [
-              {
-                url = "http://simplehttp";
-              }
-            ];
-          };
-        };
-
       };
     };
 
-    # Test objectives:
-    # - Ensure that `routing.extraFiles` are being:
-    #   - generated
-    #   - loaded by traefik
-    #   - given the correct permissions in the simple case of `user == traefik` and `group == traefik`
+    # Test objectives, in directory mode:
+    # - Multiple `routing.provider.directory.extraFiles` are generated as separate files
+    #   (_nixos-extra-<name>.yml) and loaded without overwriting each other
+    # - `routing.settings` is also written into the directory (as _nixos-settings.yml) and loaded
+    # - Files get the correct permissions in the simple case of `user == traefik` and `group == traefik`
     "extra" = {
       services.traefik = {
         enable = true;
 
         routing = {
-          dir = "/etc/traefik/routing";
-
-          extraFiles."extrahttp".settings = {
-            http.routers."extrahttp" = {
-              rule = "Host(`extrahttp.extra`)";
+          # written into the directory as _nixos-settings.yml
+          settings.http = {
+            routers."settingshttp" = {
+              rule = "Host(`settingshttp.extra`)";
               entryPoints = [ "web" ];
-              service = "extrahttp";
+              service = "settingshttp";
             };
-
-            http.services."extrahttp".loadBalancer.servers = [
+            services."settingshttp".loadBalancer.servers = [
               {
                 url = "http://simplehttp";
               }
             ];
+          };
+
+          provider.directory = {
+            path = "/etc/traefik/routing";
+
+            # two separate named fragments -> _nixos-extra-extrahttp1.yml / _nixos-extra-extrahttp2.yml
+            extraFiles."extrahttp1".settings = {
+              http.routers."extrahttp1" = {
+                rule = "Host(`extrahttp1.extra`)";
+                entryPoints = [ "web" ];
+                service = "extrahttp1";
+              };
+
+              http.services."extrahttp1".loadBalancer.servers = [
+                {
+                  url = "http://simplehttp";
+                }
+              ];
+            };
+
+            extraFiles."extrahttp2".settings = {
+              http.routers."extrahttp2" = {
+                rule = "Host(`extrahttp2.extra`)";
+                entryPoints = [ "web" ];
+                service = "extrahttp2";
+              };
+
+              http.services."extrahttp2".loadBalancer.servers = [
+                {
+                  url = "http://simplehttp";
+                }
+              ];
+            };
           };
         };
       };
@@ -188,24 +188,24 @@
     extra.wait_for_open_port(80)
     extra.wait_for_unit("multi-user.target")
 
-    with subtest("Check that the declarative routing configuration works"):
+    with subtest("Check that the declarative routing configuration (single generated file) works"):
         assert "Directory listing for " in client.succeed(
             "curl -sSf -H Host:declarativehttp.declare http://declare/"
         )
 
-    with subtest("Check that the first auto merged declarative extraFiles routing configuration works"):
+    with subtest("Check that the first directory extraFile is generated and served"):
         assert "Directory listing for " in client.succeed(
-            "curl -sSf -H Host:extrahttp1.declare http://declare/"
+            "curl -sSf -H Host:extrahttp1.extra http://extra/"
         )
 
-    with subtest("Check that the second auto merged declarative extraFiles routing configuration works"):
+    with subtest("Check that the second directory extraFile is generated and served (no overwrite)"):
         assert "Directory listing for " in client.succeed(
-            "curl -sSf -H Host:extrahttp2.declare http://declare/"
+            "curl -sSf -H Host:extrahttp2.extra http://extra/"
         )
 
-    with subtest("Check that the declarative extraFiles routing configuration works"):
+    with subtest("Check that routing.settings is written into the directory and served"):
         assert "Directory listing for " in client.succeed(
-            "curl -sSf -H Host:extrahttp.extra http://extra/"
+            "curl -sSf -H Host:settingshttp.extra http://extra/"
         )
 
     docker.wait_for_unit("traefik.service")

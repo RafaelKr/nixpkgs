@@ -485,7 +485,7 @@ in
           };
         };
       };
-      routing.extraFiles."pangolin".settings = {
+      routing.settings = {
         http = {
           middlewares.redirect-to-https.redirectScheme.scheme = "https";
           routers = {

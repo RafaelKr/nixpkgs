@@ -1,5 +1,4 @@
 {
-  options,
   config,
   lib,
   pkgs,
@@ -8,6 +7,7 @@
 
 let
   inherit (lib.types)
+    attrTag
     attrsOf
     listOf
     nullOr
@@ -17,11 +17,16 @@ let
     package
     ;
   inherit (lib)
+    attrByPath
+    attrNames
+    attrValues
     concatMapStringsSep
     converge
     filter
     filterAttrsRecursive
     getExe
+    head
+    listToAttrs
     literalExpression
     mapAttrs'
     mkDefault
@@ -32,15 +37,68 @@ let
     mkRemovedOptionModule
     nameValuePair
     optional
+    optionalAttrs
     recursiveUpdate
-    types
     ;
 
   cfg = config.services.traefik;
-  opt = options.services.traefik;
   json = pkgs.formats.json { };
   # Traefik accepts JSON as a valid YAML subset
-  defaultOptPrio = (lib.mkOptionDefault { }).priority;
+  # Strip empty markers (`null`/`{}`/`[]`) before generating config. `converge` repeats until a
+  # fixpoint so attrsets that become empty only after their children are removed are dropped too.
+  filterEmpty = converge (filterAttrsRecursive (_: v: v != null && v != { } && v != [ ]));
+
+  # Freeform `providers.file` configuration shared by the routing providers (watch, ...).
+  providerSettings = mkOption {
+    type = json.type;
+    default = { };
+    example = {
+      watch = false;
+    };
+    description = ''
+      Additional `providers.file` configuration merged verbatim into Traefik's generated
+      `providers.file` block for this provider — for example `watch` (which defaults to `true`
+      in Traefik). The `path` (and, for a directory, `extraFiles`) is configured separately.
+    '';
+  };
+
+  # Convert the selected routing provider to a providers.file block, keyed by its tag: its
+  # freeform `settings` plus the `path` translated to `filename`/`directory`.
+  providerToFile = {
+    file = c: c.settings // { filename = toString c.path; };
+    externalFile = c: c.settings // { filename = toString c.path; };
+    directory = c: c.settings // { directory = toString c.path; };
+  };
+
+  # providers.file block injected into the generated install config (empty for no provider).
+  resolvedProviderFile = optionalAttrs (cfg.routing.provider != null) (
+    providerToFile.${head (attrNames cfg.routing.provider)} (head (attrValues cfg.routing.provider))
+  );
+
+  # Passed to the daemon as `--configfile`: the external file verbatim, or generated from
+  # `install.settings` with the file provider and local plugins merged in.
+  staticConfigFile =
+    if cfg.install ? file then
+      toString cfg.install.file
+    else
+      json.generate "install_config.json" (
+        filterEmpty (
+          recursiveUpdate cfg.install.settings (
+            {
+              providers.file = resolvedProviderFile;
+            }
+            // optionalAttrs (cfg.localPluginPackages != [ ]) {
+              experimental.localPlugins = listToAttrs (
+                map (plugin: nameValuePair plugin.plugin { inherit (plugin) moduleName; }) cfg.localPluginPackages
+              );
+            }
+          )
+        )
+      );
+
+  routingFile = json.generate "routing_config.json" (filterEmpty cfg.routing.settings);
+
+  managedDir = cfg.routing.provider ? directory;
 in
 {
   imports = [
@@ -89,7 +147,9 @@ in
         "services"
         "traefik"
         "routing"
-        "file"
+        "provider"
+        "externalFile"
+        "path"
       ]
     )
     (mkRenamedOptionModule
@@ -110,220 +170,214 @@ in
     enable = lib.mkEnableOption "Traefik web server";
     package = lib.mkPackageOption pkgs "traefik" { };
 
-    install = {
-      file = mkOption {
-        default = json.generate "install_config.json" (
-          # converge is needed to fully remove entire trees of empty attribute sets
-          converge (
-            # remove `null` (used for comparisons of unset values)
-            # and `{}` or `[]`, which is left behind by type checked submodule options
-            filterAttrsRecursive (_: val: val != null && val != { } && val != [ ])
-          ) cfg.install.settings
-        );
-        example = literalExpression "/path/to/install_config.yml";
-        type = path;
-        # Ideally default option values would instead be filtered by `options.<option>.highestPrio == (lib.mkOptionDefault {}).priority`
-        # TODO exclusivity warning wording
-        description = ''
-          Path to Traefik's install configuration file, passed to the daemon as `--configfile`
-
-          ::: {.note}
-          You cannot use this option alongside the declarative install configuration options.
-          :::
-        '';
+    install = mkOption {
+      default = {
+        settings = { };
       };
-      settings = mkOption {
-        description = ''
-          Install configuration for Traefik, written in Nix.
+      description = ''
+        Source of Traefik's install (static) configuration.
 
-          ::: {.warning}
-          Empty values (`{}`, `[]`, and `null`) are filtered out by default, since they are used to represent
-          unset values in option defaults.
-          Instead of declaring empty but present attributes as `attr = {}`, declare them as `attr = true`.
-          To see exactly how this is handled, look at the default value of `cfg.install.settings`
-          :::
+        ::: {.note}
+        Set exactly one of `file` or `settings`; they are mutually exclusive.
+        :::
+      '';
+      type = attrTag {
+        file = mkOption {
+          example = literalExpression "/path/to/install_config.yml";
+          type = path;
+          description = ''
+            Path to Traefik's install configuration file, passed to the daemon as `--configfile`
 
-          ::: {.note}
-          This will be serialized to JSON (which is considered valid YAML) at build, and passed to Traefik as `--configfile`.
-          :::
-        '';
-        type = types.submodule {
-          freeformType = json.type;
-          options = {
-            providers = {
-              file = {
-                filename = mkOption {
-                  default = cfg.routing.file;
-                };
-                directory = mkOption {
-                  default = cfg.routing.dir;
-                };
-              };
-            };
-            # TODO make sure this properly replaces `mkIf` statement as intended
-            experimental.localPlugins = mkOption {
-              default =
-                if (cfg.localPluginPackages != [ ]) then
-                  lib.listToAttrs (
-                    map (
-                      plugin: lib.nameValuePair plugin.plugin { inherit (plugin) moduleName; }
-                    ) cfg.localPluginPackages
-                  )
-                else
-                  { };
-              example = {
-                "wasm-plugin-name".settings = {
-                  envs = [ "SECRET_ENV" ];
-                  mounts = [ "/path/to/mount" ];
-                };
-              };
-              description = ''
-                Local plugins allow you to use plugins from a local directory, without publishing them to the Traefik plugin catalog.
-
-                ::: {.note}
-                By default, this will create an attribute set from the option `cfg.localPluginPackages`. To add a plugin from a package, use that option instead.
-                :::
-              '';
-            };
-          };
+            ::: {.note}
+            You cannot use this option alongside the declarative install configuration options.
+            :::
+          '';
         };
-        default = { };
-        example = {
-          entryPoints = {
-            "web" = {
-              address = ":80";
-              http.redirections.entryPoint = {
-                permanent = true;
-                scheme = "https";
-                to = "websecure";
+        settings = mkOption {
+          description = ''
+            Install configuration for Traefik, written in Nix.
+
+            ::: {.warning}
+            Empty values (`{}`, `[]`, and `null`) are filtered out by default, since they are used to represent
+            unset values in option defaults.
+            Instead of declaring empty but present attributes as `attr = {}`, declare them as `attr = true`.
+            :::
+
+            ::: {.note}
+            This will be serialized to JSON (which is considered valid YAML) at build, and passed to Traefik as `--configfile`.
+            :::
+
+            ::: {.note}
+            The `providers.file` block is derived from {option}`services.traefik.routing`; do
+            not set `providers.file` here.
+            `experimental.localPlugins` entries are generated from
+            {option}`services.traefik.localPluginPackages`, but you may still add per-plugin
+            `settings` (such as `envs` and `mounts`) here.
+            :::
+          '';
+          type = json.type;
+          default = { };
+          example = {
+            entryPoints = {
+              "web" = {
+                address = ":80";
+                http.redirections.entryPoint = {
+                  permanent = true;
+                  scheme = "https";
+                  to = "websecure";
+                };
               };
-            };
-            "websecure" = {
-              address = ":443";
-              asDefault = true;
+              "websecure" = {
+                address = ":443";
+                asDefault = true;
+              };
             };
           };
         };
       };
-
     };
 
     routing = {
-      file = mkOption {
-        default = if (cfg.routing.settingsDrv != null) then "/etc/traefik/routing.yml" else null;
-        example = literalExpression "/path/to/routing_config.yml";
-        type = nullOr path;
-        #TODO polish/formatting
+      provider = mkOption {
+        # No file provider when there is nothing declarative to serve; otherwise a single
+        # generated file. Any explicit value overrides this.
+        default = if cfg.routing.settings == { } then null else { file = { }; };
+        defaultText = literalExpression "if routing.settings == { } then null else { file = { }; }";
         description = ''
-          Path to Traefik's routing configuration file.
+          Where Traefik's file provider reads routing configuration from, or `null` for no file
+          provider (for example a docker-labels-only setup).
 
           ::: {.note}
-          You cannot use this option alongside the declarative routing configuration options.
-          :::
-
-          ::: {.note}
-          If declarative routing configuration has been set, it will automatically be serialized to JSON (which Traefik accepts as a valid YAML subset) at build
-          and linked to `/etc/traefik/routing.yml`. The file permissions and directories will be set automatically if `user == traefik`, otherwise
-          you are responsible for ensuring those are set before the traefik service starts.
-          :::
-
-          ::: {.note}
-          To avoid this behaviour entirely, prefer setting `install.settings.providers.file.*` directly instead
+          `path` maps to `providers.file.filename` (for `file`/`externalFile`) or
+          `providers.file.directory` (for `directory`). Any other `providers.file.*` key (such
+          as `watch`, which defaults to `true` in Traefik) goes under `settings`. The modes are
+          mutually exclusive.
           :::
         '';
-      };
-      dir = mkOption {
-        default = null;
-        example = literalExpression "/etc/traefik/routing";
-        type = nullOr path;
-        #TODO add warning for exclusivity, relevant documentation
-        description = ''
-          Path to the directory Traefik should watch for configuration files.
-
-          ::: {.warning}
-          Files in this directory matching the glob `_nixos-*` (reserved for Nix-managed routing configurations) will be deleted as part of
-          `systemd-tmpfiles-resetup.service`, _**regardless of their origin.**_.
-          :::
-        '';
-      };
-      extraFiles = mkOption {
-        type = attrsOf (submodule {
-          options.settings = mkOption {
-            type = json.type;
-            #TODO fix note,
-            #TODO mention auto merge
+        type = nullOr (attrTag {
+          file = mkOption {
             description = ''
-              Routing configuration for Traefik, written in Nix.
+              NixOS-managed single file. {option}`services.traefik.routing.settings` is
+              serialized to it and linked at `path`.
+            '';
+            type = submodule {
+              options = {
+                path = mkOption {
+                  type = path;
+                  default = "/etc/traefik/routing.yml";
+                  description = "Location the generated routing file is linked to (`providers.file.filename`).";
+                };
+                settings = providerSettings;
+              };
+            };
+          };
+          externalFile = mkOption {
+            description = ''
+              User-managed single routing configuration file.
 
               ::: {.note}
-              This will be serialized to JSON (which Traefik accepts as a valid YAML subset) at build, and passed as part of the install file.
+              You cannot use this option alongside the declarative {option}`services.traefik.routing.settings` option.
               :::
             '';
-            example = {
-              http.routers."api" = {
-                service = "api@internal";
-                rule = "Host(`localhost`)";
+            type = submodule {
+              options = {
+                path = mkOption {
+                  type = path;
+                  example = literalExpression "/path/to/routing_config.yml";
+                  description = "Path to the user-managed routing file (`providers.file.filename`).";
+                };
+                settings = providerSettings;
+              };
+            };
+          };
+          directory = mkOption {
+            description = ''
+              Directory Traefik watches for routing configuration files.
+
+              ::: {.note}
+              {option}`services.traefik.routing.settings` is written to `_nixos-settings.yml` and
+              each `extraFiles.<name>` to `_nixos-extra-<name>.yml`; you may add your own files too.
+              :::
+            '';
+            type = submodule {
+              options = {
+                path = mkOption {
+                  type = path;
+                  example = literalExpression "/etc/traefik/routing";
+                  description = ''
+                    Path to the directory Traefik should watch for configuration files.
+
+                    ::: {.warning}
+                    Files in this directory matching the glob `_nixos-*` (reserved for Nix-managed routing configurations) will be deleted as part of
+                    `systemd-tmpfiles-resetup.service`, _**regardless of their origin.**_.
+                    :::
+
+                    ::: {.note}
+                    When {option}`services.traefik.user` and {option}`services.traefik.group` are
+                    left at their default `traefik`, this directory is created with appropriate
+                    ownership and permissions automatically. Otherwise you are responsible for
+                    ensuring it exists with appropriate ownership before the Traefik service starts.
+                    :::
+                  '';
+                };
+                extraFiles = mkOption {
+                  type = attrsOf (submodule {
+                    options.settings = mkOption {
+                      type = json.type;
+                      description = ''
+                        Routing configuration for Traefik, written in Nix.
+
+                        ::: {.note}
+                        This will be serialized to JSON (which Traefik accepts as a valid YAML subset) at build, and passed as part of the install file.
+                        :::
+                      '';
+                      example = {
+                        http.routers."api" = {
+                          service = "api@internal";
+                          rule = "Host(`localhost`)";
+                        };
+                      };
+                    };
+                  });
+                  default = { };
+                  example = {
+                    "dashboard".settings = {
+                      http.routers."api" = {
+                        service = "api@internal";
+                        rule = "Host(`198.51.100.1`)";
+                      };
+                    };
+                  };
+                  # TODO process `extraFiles` and validate by json schema,
+                  # schema available at schemastore.org
+                  # Complete as part of separate PR
+                  description = ''
+                    Routing configuration files to write. These are symlinked in `services.traefik.routing.provider.directory.path` upon activation,
+                    allowing configuration to be updated without restarting the primary daemon.
+
+                    ::: {.note}
+                    Due to [a limitation in Traefik](https://github.com/traefik/traefik/issues/10890); a syntax error in _**any**_ routing configuration will cause the _**entire file provider**_ to be ignored.
+                    This may cause interruption in service, which may include access to the Traefik dashboard, if [enabled and configured](https://doc.traefik.io/traefik/reference/install-configuration/api-dashboard/).
+                    :::
+                  '';
+                };
+                settings = providerSettings;
               };
             };
           };
         });
-        default = { };
-        example = {
-          "dashboard".settings = {
-            http.routers."api" = {
-              service = "api@internal";
-              rule = "Host(`198.51.100.1`)";
-            };
-          };
-        };
-        # TODO process `extraFiles` and/or `settingsDrv` and validate by json schema,
-        # schema available at schemastore.org
-        # Complete as part of separate PR
-        description = ''
-          Routing configuration files to write. These are symlinked in `services.traefik.routing.dir` upon activation,
-          allowing configuration to be updated without restarting the primary daemon.
-
-          ::: {.note}
-          Due to [a limitation in Traefik](https://github.com/traefik/traefik/issues/10890); a syntax error in _**any**_ routing configuration will cause the _**entire file provider**_ to be ignored.
-          This may cause interruption in service, which may include access to the Traefik dashboard, if [enabled and configured](https://doc.traefik.io/traefik/reference/install-configuration/api-dashboard/).
-          :::
-        '';
-      };
-
-      settingsDrv = mkOption {
-        type = nullOr path;
-        readOnly = true;
-        description = ''
-          Final declarative routing configuration. If `cfg.routing.settings` is declared, this will contain it.
-          If `cfg.routing.extraFiles` is declared but `cfg.routing.dir` is not, the contents of `cfg.routing.extraFiles.*.settings`
-          will be merged with `cfg.routing.settings`.
-          This allows other modules to write `enableTraefik` options which are compatible with both `cfg.routing.extraFiles` and `cfg.routing.settings`
-
-          ::: {.note}
-          Modules implementing an `enableTraefik` option should list the following in its description, so that users may override values as needed:
-          - The names of any added:
-            - `extraFiles`
-            - `services`
-            - `routers`
-          - Whether they declare a router, service, or both
-          :::
-        '';
-        default =
-          if (cfg.routing.settings != { }) then
-            json.generate "traefik-routing-settings.yml" (
-              recursiveUpdate cfg.routing.settings (
-                lib.optionalAttrs (cfg.routing.extraFiles != { } && cfg.routing.dir == null) lib.foldAttrs (
-                  item: acc: recursiveUpdate item acc
-                ) { } (lib.mapAttrsToList (name: value: value.settings) cfg.routing.extraFiles)
-              )
-            )
-          else
-            null;
       };
       settings = mkOption {
         type = json.type;
         description = ''
           Routing configuration for Traefik, written in Nix.
+
+          ::: {.note}
+          Other modules can contribute to this option (for example to expose a service through
+          Traefik) without knowing how the file provider is configured. A module that does so
+          should document the router, service, and middleware names it adds — and whether it
+          declares a router, a service, or both — so that users can override them.
+          :::
         '';
         default = { };
         example = {
@@ -437,65 +491,42 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        # TODO ensure this works with install.settings being a submodule
         assertion =
-          opt.install.file.highestPrio != defaultOptPrio
-          -> opt.install.settings.highestPrio == defaultOptPrio;
+          cfg.install ? file
+          -> (cfg.routing.provider == null && cfg.routing.settings == { } && cfg.localPluginPackages == [ ]);
         message = ''
-          The 'services.traefik.install.file' and 'services.traefik.install.settings'
-          options are mutually exclusive for the Traefik install config.
-          It is recommended to use 'settings'.
-        '';
-      }
-      (
-        let
-          isEmpty = a: (a == { } || a == [ ] || a == null);
-        in
-        {
-          assertion =
-            (opt.install.file.highestPrio != defaultOptPrio)
-            -> (builtins.all isEmpty [
-              cfg.routing.extraFiles
-              cfg.routing.dir
-              cfg.routing.file
-              cfg.routing.settings
-            ]);
-          message = ''
-            None of the routing configuration options may be used if Traefik is being managed imperatively.
-            The following options have non-default values:
-              - ${
-                concatMapStringsSep "\n  - " (str: "'services.traefik.routing.${str}'") (
-                  filter (attr: !(isEmpty cfg.routing."${attr}")) [
-                    "extraFiles"
-                    "dir"
-                    "file"
-                    "settings"
-                  ]
-                )
-              }
-          '';
-        }
-      )
-      {
-        assertion = cfg.routing.file != null -> cfg.routing.dir == null;
-        message = ''
-          The 'services.traefik.routing.file' and 'services.traefik.routing.dir' options
-          are mutually exclusive for the Traefik routing config. It is recommended to use
-          'services.traefik.routing.dir' with 'services.traefik.routing.extraFiles'.
+          'services.traefik.install.file' is a complete external install config; NixOS cannot
+          inject a file provider, routing, or plugins into it. Declare those inside the file, or
+          use 'services.traefik.install.settings'.
         '';
       }
       {
-        assertion = cfg.routing.extraFiles != { } && cfg.routing.settings == { } -> cfg.routing.dir != null;
+        assertion = cfg.routing.provider ? externalFile -> cfg.routing.settings == { };
         message = ''
-          'services.traefik.routing.extraFiles' requires the routing file provider to be set
-          to a directory. Please set a path for 'services.traefik.routing.dir'.
+          'services.traefik.routing.provider.externalFile' is user-managed and cannot serve
+          'services.traefik.routing.settings'. Use 'file' or 'directory' instead.
+        '';
+      }
+      {
+        assertion = cfg.routing.provider == null -> cfg.routing.settings == { };
+        message = ''
+          'services.traefik.routing.settings' is set but 'services.traefik.routing.provider' is
+          null, so there is no file provider to serve it. Set 'provider' to 'file' or 'directory'.
+        '';
+      }
+      {
+        assertion =
+          cfg.install ? settings -> attrByPath [ "providers" "file" ] null cfg.install.settings == null;
+        message = ''
+          Configure Traefik's file provider through 'services.traefik.routing.provider' rather
+          than setting 'providers.file' in 'services.traefik.install.settings'.
         '';
       }
       {
         assertion = cfg.group != "docker";
         message = ''
           Setting the primary group to 'docker' will cause files, such as those generated
-          by 'services.traefik.routing.extraFiles', to be owned by the group 'docker', which
+          by 'services.traefik.routing.provider.directory.extraFiles', to be owned by the group 'docker', which
           may be a security risk. Use 'services.traefik.supplementaryGroups' instead.
         '';
       }
@@ -533,7 +564,7 @@ in
       unitConfig.Documentation = "https://doc.traefik.io/traefik/";
       serviceConfig = {
         EnvironmentFile = cfg.environmentFiles;
-        ExecStart = "${getExe cfg.package} --configfile=${cfg.install.file}";
+        ExecStart = "${getExe cfg.package} --configfile=${staticConfigFile}";
         Type = "notify";
         User = cfg.user;
         Group = cfg.group;
@@ -551,7 +582,10 @@ in
         ProtectKernelTunables = true;
         ProtectControlGroups = true;
         ReadWritePaths = [ cfg.dataDir ];
-        ReadOnlyPaths = optional (cfg.routing.dir != null) cfg.routing.dir;
+        ReadOnlyPaths =
+          optional managedDir (toString cfg.routing.provider.directory.path)
+          ++ optional (cfg.routing.provider ? file) (toString cfg.routing.provider.file.path)
+          ++ optional (cfg.routing.provider ? externalFile) (toString cfg.routing.provider.externalFile.path);
         RuntimeDirectoryMode = "0700";
         RuntimeDirectory = "traefik";
         WorkingDirectory = cfg.dataDir;
@@ -567,11 +601,11 @@ in
           mode = "0770";
         };
       })
-      (mkIf (cfg.routing.settingsDrv != null) {
-        "/etc/traefik/routing.yml"."L+".argument = toString cfg.routing.settingsDrv;
+      (mkIf (cfg.routing.provider ? file) {
+        ${toString cfg.routing.provider.file.path}."L+".argument = toString routingFile;
       })
-      (mkIf (cfg.routing.dir != null && (cfg.user == "traefik" || cfg.group == "traefik")) {
-        ${cfg.routing.dir}.d = {
+      (mkIf (managedDir && (cfg.user == "traefik" || cfg.group == "traefik")) {
+        ${toString cfg.routing.provider.directory.path}.d = {
           user = mkIf (cfg.user == "traefik") cfg.user;
           group = mkIf (cfg.group == "traefik") cfg.group;
           # Traefik doesn't need write perms on this, only read/execute. Global read isn't a security risk
@@ -579,17 +613,23 @@ in
           mode = "0555";
         };
       })
-      (mkIf (cfg.routing.dir != null) (
+      (mkIf managedDir (
+        let
+          dir = toString cfg.routing.provider.directory.path;
+        in
         {
           # Remove previous declarative routing configuration files
-          "${cfg.routing.dir}/_nixos-*".r = { };
+          "${dir}/_nixos-*".r = { };
+        }
+        // optionalAttrs (cfg.routing.settings != { }) {
+          "${dir}/_nixos-settings.yml"."L+".argument = toString routingFile;
         }
         // (mapAttrs' (
           name: value:
-          nameValuePair "${cfg.routing.dir}/_nixos-${name}.yml" {
+          nameValuePair "${dir}/_nixos-extra-${name}.yml" {
             "L+".argument = toString (json.generate name value.settings);
           }
-        ) cfg.routing.extraFiles)
+        ) cfg.routing.provider.directory.extraFiles)
       ))
       # Symlink package directories (in the nix store) to the `plugins-local` folder
       # This path is hard coded, and should be placed in the working directory of the process running the Traefik binary.

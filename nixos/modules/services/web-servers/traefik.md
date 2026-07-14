@@ -25,9 +25,20 @@ option set.
 
 ### routing Configuration {#module-services-traefik-usage-routing}
 
-The routing configuration has a similar option set to the install configuration,
-with the addition of {option}`services.traefik.routing.dir` and `services.traefik.routing.extraFiles`.
-#TODO benefits
+The routing configuration separates the configuration itself from where Traefik
+reads it.
+
+- The {option}`services.traefik.routing.settings` option lets you declare the
+  routing configuration directly in the NixOS configuration. Other modules can
+  contribute to it without knowing how the file provider is set up.
+
+- The {option}`services.traefik.routing.provider` option selects where Traefik's
+  file provider reads that configuration from: a single generated `file`, a
+  user-managed `externalFile`, or a watched `directory`. A directory additionally
+  accepts per-file fragments through
+  {option}`services.traefik.routing.provider.directory.extraFiles`, so changes can
+  be made without restarting the daemon. Left unset, a single file is generated
+  when routing configuration via {option}`services.traefik.routing.settings` is present.
 
 ## Plugins {#module-services-traefik-plugins}
 
@@ -123,5 +134,5 @@ ACME secrets for setting up DNS-01 challenges.
 The Traefik module now features new ways to deploy the routing and install configuration, which were previously called dynamic and static configuration. For a simple migration, move your existing declarative install and routing configurations to `services.traefik.install.settings` and `services.traefik.routing.settings` respectively.
 The option to use `EnvSubst` to substitute environment variables has been removed, as using environment variables to store secrets is already supported by the {option}`services.traefik.environmentFiles`. Please open an issue and mention the maintainers if this causes issues.
 
-A new option, `services.traefik.routing.extraFiles.<name>`, is now available. In conjunction with `services.traefik.routing.dir`, this allows
+A new option, `services.traefik.routing.provider.directory.extraFiles.<name>`, is now available. In conjunction with `services.traefik.routing.provider.directory.path`, this allows
 you to group settings into files that are linked to traefiks `providers.file.directory`. This allows you to mix declarative and imperative configuration, and means that changes in the routing configuration can occur without restarting the primary daemon. Please see [LINK]() for a thorough description of the changes.
