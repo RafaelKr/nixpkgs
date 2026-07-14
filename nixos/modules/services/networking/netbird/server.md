@@ -122,7 +122,7 @@ The sections below configure the individual NetBird components.
 
 ### Embedded Identity Provider {#module-services-netbird-server-embedded-idp}
 
-NetBird supports an embedded identity provider for simplified deployments that don't require an external SSO. Enable it with `idp.embedded.enable`, then customize via the freeform `settings` option:
+NetBird supports an embedded identity provider for simplified deployments that don't require an external SSO. Enable it with `idp.embedded.enable = true`, then customize via the freeform `settings` option:
 
 ```nix
 {

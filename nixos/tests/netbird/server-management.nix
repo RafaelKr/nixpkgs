@@ -133,6 +133,26 @@
           requires = [ "mysql.service" ];
         };
       };
+
+    managementWithEmbeddedIdp = {
+      services.netbird.server.management = {
+        enable = true;
+        domain = "mgmt-idp.test";
+        turnDomain = "turn.test";
+        port = 8011;
+        metricsPort = 9090;
+
+        # Enable the embedded identity provider (selects the attrTag + enables it).
+        idp.embedded.enable = true;
+
+        settings = {
+          # Use a test encryption key
+          DataStoreEncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+          # The embedded Dex IdP needs a 16/24/32-byte session cookie key to boot.
+          EmbeddedIdP.SessionCookieEncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+        };
+      };
+    };
   };
 
   testScript = ''
@@ -181,6 +201,15 @@
     # Verify mysql engine is in config
     managementWithMysql.succeed(
         "grep -qE '\"Engine\":[[:space:]]*\"mysql\"' /var/lib/netbird-mgmt/management.json"
+    )
+
+    # Test management with the embedded identity provider (idp.embedded attrTag)
+    managementWithEmbeddedIdp.wait_for_unit("netbird-management.service")
+    managementWithEmbeddedIdp.wait_for_open_port(8011)
+
+    # Verify the embedded IdP block was rendered into the config
+    managementWithEmbeddedIdp.succeed(
+        "grep -q '\"EmbeddedIdP\"' /var/lib/netbird-mgmt/management.json"
     )
   '';
 }

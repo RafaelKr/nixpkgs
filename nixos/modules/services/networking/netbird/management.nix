@@ -28,6 +28,7 @@ let
     ;
 
   inherit (lib.types)
+    attrTag
     attrsOf
     bool
     either
@@ -41,6 +42,8 @@ let
     ;
 
   inherit (utils) genJqSecretsReplacementSnippet;
+
+  cfg = config.services.netbird.server.management;
 
   stateDir = "/var/lib/netbird-mgmt";
 
@@ -68,6 +71,8 @@ let
       }
     else
       null;
+
+  embeddedIdpEnabled = (cfg.idp ? embedded) && cfg.idp.embedded.enable;
 
   defaultSettings = {
     Stuns = [
@@ -119,7 +124,7 @@ let
     IdpManagerConfig = {
       ManagerType = "none";
       ClientConfig = {
-        Issuer = if cfg.idp.embedded.enable then "https://${cfg.domain}/oauth2" else "";
+        Issuer = if embeddedIdpEnabled then "https://${cfg.domain}/oauth2" else "";
         TokenEndpoint = "";
         ClientID = "netbird";
         ClientSecret = "";
@@ -158,7 +163,7 @@ let
       };
     };
   }
-  // optionalAttrs cfg.idp.embedded.enable {
+  // optionalAttrs embeddedIdpEnabled {
     EmbeddedIdP = {
       Enabled = true;
       Issuer = "https://${cfg.domain}/oauth2";
@@ -186,8 +191,6 @@ let
   managementConfig = recursiveUpdate defaultSettings cfg.settings;
 
   managementFile = settingsFormat.generate "config.json" managementConfig;
-
-  cfg = config.services.netbird.server.management;
 in
 
 {
@@ -371,14 +374,30 @@ in
       };
     };
 
-    # Embedded IDP
-    idp.embedded.enable = mkEnableOption ''
-      the embedded identity provider.
-      When enabled, configures the EmbeddedIdP section and provides
-      default EmbeddedIdP values derived from the domain.
-      Customize the embedded IDP via the `settings` freeform option
-      (e.g. `settings.EmbeddedIdP.Owner.Email = "admin@example.com"`)
-    '';
+    # Identity provider
+    idp = mkOption {
+      type = nullOr (attrTag {
+        embedded = mkOption {
+          type = submodule {
+            options.enable = mkEnableOption "NetBird's built-in (embedded Dex) identity provider";
+          };
+          default = { };
+          description = ''
+            Run NetBird's built-in (embedded Dex) identity provider, served by
+            the management server under `/oauth2`. It configures the
+            `EmbeddedIdP` section with defaults derived from the domain;
+            customize it through the {option}`settings` freeform option (e.g.
+            `settings.EmbeddedIdP.Owner.Email = "admin@example.com"`).
+          '';
+        };
+      });
+      default = null;
+      description = ''
+        Identity provider backend for the management API. Select and enable a
+        backend, e.g. `idp.embedded.enable = true`. Leave unset to use an
+        external OIDC provider configured via {option}`oidcConfigEndpoint`.
+      '';
+    };
 
     # Database backend configuration
     store = {
@@ -576,7 +595,15 @@ in
           )
           "netbird-management: settings.StoreConfig.Engine (${
             cfg.settings.StoreConfig.Engine or ""
-          }) overrides store.engine (${cfg.store.engine}); the settings value wins and drives the DSN credential. Set store.engine instead of overriding it via settings.";
+          }) overrides store.engine (${cfg.store.engine}); the settings value wins and drives the DSN credential. Set store.engine instead of overriding it via settings."
+      ++
+        optional
+          (
+            !embeddedIdpEnabled
+            && (managementConfig.HttpConfig.OIDCConfigEndpoint or "") == ""
+            && (managementConfig.HttpConfig.AuthIssuer or "") == ""
+          )
+          "netbird-management: no identity provider is configured (neither idp.embedded nor oidcConfigEndpoint, and no settings.HttpConfig.AuthIssuer). The management API has no working authentication and the dashboard cannot log in. Select idp.embedded.enable = true or set oidcConfigEndpoint.";
 
     assertions = [
       {
@@ -602,7 +629,7 @@ in
         message = "certFile must be set when certKey is set";
       }
       {
-        assertion = !cfg.idp.embedded.enable || cfg.oidcConfigEndpoint == "";
+        assertion = !embeddedIdpEnabled || cfg.oidcConfigEndpoint == "";
         message = "oidcConfigEndpoint should not be set when using embedded IDP";
       }
       {
@@ -746,7 +773,7 @@ in
         backend.websocket.upstream = "127.0.0.1:${toString cfg.port}";
       };
     }
-    // optionalAttrs cfg.idp.embedded.enable {
+    // optionalAttrs embeddedIdpEnabled {
       # The embedded IdP is served by the management server under /oauth2.
       # NetBird route (v0.74.6): "/oauth2" -> HTTP (backend router).
       # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L861-L867
