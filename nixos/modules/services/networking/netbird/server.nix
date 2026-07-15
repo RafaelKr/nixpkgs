@@ -3,23 +3,30 @@
 let
   inherit (lib)
     attrValues
+    filterAttrs
     getAttrFromPath
     intersectLists
+    mapAttrs'
     mkChangedOptionModule
     mkDefault
     mkEnableOption
     mkIf
     mkMerge
     mkOption
+    nameValuePair
     optional
     optionalAttrs
+    recursiveUpdate
     ;
 
   inherit (lib.types)
     attrTag
+    attrs
     attrsOf
+    bool
     nullOr
     path
+    port
     str
     submodule
     ;
@@ -107,6 +114,14 @@ let
       throw "netbird ingressRoutes: no backend selected for route '${route.path}'";
 
   nginxLocations = mkMerge (map renderNginxRoute (attrValues cfg.ingressRoutes));
+
+  # Traefik has no file server, so the static dashboard is served by a loopback
+  # nginx and reverse-proxied by Traefik; every other route Traefik serves itself.
+  staticRoutes = filterAttrs (_: route: route.backend ? static) cfg.ingressRoutes;
+
+  # `ingress` is an optional attrTag, so guard the tag access with `?`.
+  nginxEnabled = (cfg.ingress ? nginx) && cfg.ingress.nginx.enable;
+  traefikEnabled = (cfg.ingress ? traefik) && cfg.ingress.traefik.enable;
 in
 
 {
@@ -195,6 +210,68 @@ in
             {option}`services.netbird.server.ingress.nginx.settings`.
           '';
         };
+        traefik = mkOption {
+          type = submodule {
+            options = {
+              enable = mkEnableOption "Traefik as the ingress for the NetBird server stack";
+              acme = {
+                enable = mkOption {
+                  type = bool;
+                  default = true;
+                  description = ''
+                    Obtain the management-domain certificate through ACME
+                    (Let's Encrypt, TLS-ALPN-01). Disable to terminate TLS with a
+                    certificate you supply through
+                    {option}`services.netbird.server.ingress.traefik.dynamicConfigOptions`.
+                  '';
+                };
+                email = mkOption {
+                  type = nullOr str;
+                  default = null;
+                  description = "Contact email for the Let's Encrypt account. Required when `acme.enable` is true.";
+                };
+              };
+              staticListenPort = mkOption {
+                type = port;
+                default = 8083;
+                description = ''
+                  Loopback port of the internal nginx that serves the static
+                  dashboard. Traefik has no file server, so it proxies its `/`
+                  route to this address.
+                '';
+              };
+              staticConfigOptions = mkOption {
+                type = attrs;
+                default = { };
+                description = ''
+                  Extra Traefik static configuration merged onto the generated
+                  one (entry points, certificate resolvers, ...). See
+                  {option}`services.traefik.staticConfigOptions`.
+                '';
+              };
+              dynamicConfigOptions = mkOption {
+                type = attrs;
+                default = { };
+                description = ''
+                  Extra Traefik dynamic configuration merged onto the generated
+                  routers and services (TLS certificates and stores, middlewares,
+                  ...). See {option}`services.traefik.dynamicConfigOptions`.
+                '';
+              };
+            };
+          };
+          default = { };
+          description = ''
+            Serve the NetBird server stack behind Traefik: L7-terminate the
+            management domain (dashboard, API + gRPC, signal, relay) and, for the
+            NetBird reverse proxy, L4 SNI-passthrough every other SNI. Mirrors
+            NetBird's own built-in-Traefik topology.
+
+            Enable it with
+            `services.netbird.server.ingress.traefik.enable = true`. A loopback
+            nginx serves the static dashboard (Traefik has no file server).
+          '';
+        };
       });
       default = null;
       description = ''
@@ -257,6 +334,36 @@ in
       '';
     };
 
+    ingressPassthrough = mkOption {
+      internal = true;
+      visible = false;
+      default = { };
+      type = attrsOf (submodule {
+        options = {
+          sni = mkOption {
+            type = str;
+            default = "*";
+            description = "SNI matched for L4 TLS passthrough (Traefik `HostSNI`); `*` catches every otherwise-unmatched SNI.";
+          };
+          upstream = mkOption {
+            type = str;
+            description = "`host:port` of the TLS backend the raw stream is forwarded to.";
+          };
+          proxyProtocol = mkOption {
+            type = bool;
+            default = true;
+            description = "Wrap the forwarded stream in PROXY protocol v2 so the backend sees the real client IP.";
+          };
+        };
+      });
+      description = ''
+        Internal seam: L4 SNI-passthrough routes contributed by the server
+        components (the NetBird reverse proxy). Only the
+        {option}`services.netbird.server.ingress.traefik` backend can serve
+        these; nginx cannot do TLS passthrough.
+      '';
+    };
+
     domain = mkOption {
       type = str;
       description = "The domain under which the NetBird server runs.";
@@ -288,6 +395,20 @@ in
               - services.netbird.server.relay.stun.ports = [ <free-udp-port> ];
               - services.coturn.listening-port = <free-udp-port>;
           '';
+        }
+        {
+          assertion = cfg.ingressPassthrough == { } || traefikEnabled;
+          message = ''
+            services.netbird.server.ingressPassthrough is set but the Traefik
+            ingress backend is not enabled. L4 SNI passthrough (for the NetBird
+            reverse proxy) requires services.netbird.server.ingress.traefik.enable;
+            nginx cannot forward TLS without terminating it.
+          '';
+        }
+        {
+          assertion =
+            !traefikEnabled || !cfg.ingress.traefik.acme.enable || cfg.ingress.traefik.acme.email != null;
+          message = "services.netbird.server.ingress.traefik.acme.email is required when services.netbird.server.ingress.traefik.acme.enable is true.";
         }
       ];
 
@@ -357,13 +478,185 @@ in
       };
     };
 
-    services.nginx = mkIf ((cfg.ingress ? nginx) && cfg.ingress.nginx.enable) {
-      enable = true;
+    services.nginx = mkMerge [
+      # nginx as the ingress (serves every route directly).
+      (mkIf nginxEnabled {
+        enable = true;
 
-      virtualHosts.${cfg.domain} = mkMerge [
-        cfg.ingress.nginx.settings
-        { locations = nginxLocations; }
-      ];
-    };
+        virtualHosts.${cfg.domain} = mkMerge [
+          cfg.ingress.nginx.settings
+          { locations = nginxLocations; }
+        ];
+      })
+      # Traefik backend: a loopback-only nginx that serves just the static
+      # routes (Traefik has no file server); Traefik reverse-proxies "/" here.
+      (mkIf traefikEnabled {
+        enable = true;
+
+        virtualHosts."netbird-static" = {
+          listen = [
+            {
+              addr = "127.0.0.1";
+              port = cfg.ingress.traefik.staticListenPort;
+            }
+          ];
+          locations = mkMerge (map renderNginxRoute (attrValues staticRoutes));
+        };
+      })
+    ];
+
+    # The Traefik config below mirrors NetBird's own built-in-Traefik setup
+    # (netbird v0.74.6, infrastructure_files/getting-started.sh:
+    # render_docker_compose_traefik_builtin + render_traefik_dynamic). NetBird
+    # runs the COMBINED binary (one netbird-server:80, h2c for gRPC); this module
+    # runs the STANDALONE components on separate loopback ports, so routers are
+    # per-component here. Per-block upstream permalinks are inline below.
+    services.traefik = mkIf traefikEnabled (
+      let
+        tcfg = cfg.ingress.traefik;
+        acmeEnabled = tcfg.acme.enable;
+        staticUpstream = "127.0.0.1:${toString tcfg.staticListenPort}";
+
+        # Terminated routers use the ACME resolver, or Traefik's default
+        # certificate (supply one through
+        # ingress.traefik.dynamicConfigOptions.tls when acme.enable = false).
+        routerTls = if acmeEnabled then { certResolver = "letsencrypt"; } else { };
+
+        # gRPC needs an h2c (cleartext HTTP/2) upstream; the rest are plain http.
+        # The static dashboard route is proxied to the loopback nginx.
+        upstreamUrl =
+          route:
+          let
+            b = route.backend;
+          in
+          if b ? grpc then
+            "h2c://${b.grpc.upstream}"
+          else if b ? proxy then
+            "http://${b.proxy.upstream}"
+          else if b ? websocket then
+            "http://${b.websocket.upstream}"
+          else if b ? static then
+            "http://${staticUpstream}"
+          else
+            throw "netbird ingressRoutes: no backend selected for route '${route.path}'";
+
+        # One http router + service per L7 route. Mirrors NetBird's router rules:
+        # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L826-L871
+        httpRouters = mapAttrs' (
+          name: route:
+          nameValuePair "netbird-${name}" {
+            # The dashboard is the Host-only catch-all (NetBird: priority 1); the
+            # path-specific routes must outrank it.
+            rule =
+              if route.backend ? static then
+                "Host(`${cfg.domain}`)"
+              else
+                "Host(`${cfg.domain}`) && PathPrefix(`${route.path}`)";
+            service = "netbird-${name}";
+            entryPoints = [ "websecure" ];
+            tls = routerTls;
+            priority = if route.backend ? static then 1 else 100;
+          }
+        ) cfg.ingressRoutes;
+
+        httpServices = mapAttrs' (
+          name: route:
+          nameValuePair "netbird-${name}" {
+            loadBalancer.servers = [ { url = upstreamUrl route; } ];
+          }
+        ) cfg.ingressRoutes;
+
+        hasPassthrough = cfg.ingressPassthrough != { };
+
+        # L4 SNI passthrough: raw TLS forwarded on any unmatched SNI (the mgmt
+        # domain is L7-terminated above). Mirrors NetBird's proxy-passthrough:
+        # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L719-L727
+        tcpRouters = mapAttrs' (
+          name: p:
+          nameValuePair "netbird-${name}" {
+            rule = "HostSNI(`${p.sni}`)";
+            entryPoints = [ "websecure" ];
+            tls.passthrough = true;
+            # Lowest priority: lose to the specific-SNI (mgmt domain) routers.
+            priority = 1;
+            service = "netbird-${name}";
+          }
+        ) cfg.ingressPassthrough;
+
+        tcpServices = mapAttrs' (
+          name: p:
+          nameValuePair "netbird-${name}" {
+            loadBalancer = {
+              servers = [ { address = p.upstream; } ];
+            }
+            // optionalAttrs p.proxyProtocol { serversTransport = "pp-v2"; };
+          }
+        ) cfg.ingressPassthrough;
+
+        traefikDynamic = recursiveUpdate (
+          {
+            http = {
+              routers = httpRouters;
+              services = httpServices;
+            };
+          }
+          # PROXY-protocol v2 preserves client IPs across the L4 hop. Mirrors
+          # NetBird's render_traefik_dynamic:
+          # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L962-L971
+          // optionalAttrs hasPassthrough {
+            tcp = {
+              routers = tcpRouters;
+              services = tcpServices;
+              serversTransports.pp-v2.proxyProtocol.version = 2;
+            };
+          }
+        ) tcfg.dynamicConfigOptions;
+
+        # Entry points + ACME, mirroring NetBird's built-in-Traefik command flags:
+        # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L785-L802
+        traefikStatic = recursiveUpdate (
+          {
+            global = {
+              checkNewVersion = false;
+              sendAnonymousUsage = false;
+            };
+            entryPoints = {
+              web = {
+                address = ":80";
+                http.redirections.entryPoint = {
+                  to = "websecure";
+                  scheme = "https";
+                };
+              };
+              websecure = {
+                address = ":443";
+                asDefault = true;
+                # Let the proxy's *.<domain> ACME TLS-ALPN-01 challenges reach the
+                # HostSNI(*) passthrough instead of Traefik's own resolver.
+                allowACMEByPass = true;
+                # Zero timeouts keep long-lived gRPC streams from being closed.
+                transport.respondingTimeouts = {
+                  readTimeout = 0;
+                  writeTimeout = 0;
+                  idleTimeout = 0;
+                };
+              };
+            };
+          }
+          // optionalAttrs acmeEnabled {
+            certificatesResolvers.letsencrypt.acme = {
+              email = tcfg.acme.email;
+              storage = "${config.services.traefik.dataDir}/acme.json";
+              tlsChallenge = { };
+            };
+          }
+        ) tcfg.staticConfigOptions;
+      in
+      {
+        enable = true;
+        staticConfigOptions = traefikStatic;
+        dynamicConfigOptions = traefikDynamic;
+      }
+    );
   };
 }
