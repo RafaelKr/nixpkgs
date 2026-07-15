@@ -677,6 +677,14 @@ in
         path = "/management.ManagementService/";
         backend.grpc.upstream = "127.0.0.1:${toString cfg.port}";
       };
+
+      # NetBird management WebSocket-proxy route (v0.74.6): "/ws-proxy/management" —
+      # gRPC over WebSocket for browser/WASM clients (not the reverse-proxy feature).
+      # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L861-L867
+      management-wsproxy = {
+        path = "/ws-proxy/management";
+        backend.websocket.upstream = "127.0.0.1:${toString cfg.port}";
+      };
     }
     // optionalAttrs cfg.idp.embedded.enable {
       # The embedded IdP is served by the management server under /oauth2.
