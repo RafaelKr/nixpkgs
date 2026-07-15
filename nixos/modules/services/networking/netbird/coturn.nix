@@ -51,7 +51,7 @@ in
       type = str;
       default = "netbird";
       description = ''
-        The username used by netbird to connect to the coturn server.
+        The username used by NetBird to connect to the coturn server.
       '';
     };
 
@@ -59,7 +59,7 @@ in
       type = nullOr str;
       default = null;
       description = ''
-        The password of the user used by netbird to connect to the coturn server.
+        The password of the user used by NetBird to connect to the coturn server.
         Be advised this will be world readable in the nix store.
       '';
     };
@@ -68,7 +68,7 @@ in
       type = nullOr path;
       default = null;
       description = ''
-        The path to a file containing the password of the user used by netbird to connect to the coturn server.
+        The path to a file containing the password of the user used by NetBird to connect to the coturn server.
       '';
     };
 

@@ -164,7 +164,7 @@ in
       ];
 
   options.services.netbird.server = {
-    enable = mkEnableOption "Netbird Server stack, comprising the dashboard, management API and signal service";
+    enable = mkEnableOption "NetBird Server stack, comprising the dashboard, management API and signal service";
 
     ingress = mkOption {
       type = nullOr (attrTag {
@@ -259,7 +259,7 @@ in
 
     domain = mkOption {
       type = str;
-      description = "The domain under which the netbird server runs.";
+      description = "The domain under which the NetBird server runs.";
     };
   };
 
