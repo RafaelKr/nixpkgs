@@ -21,8 +21,8 @@
           enable = true;
           domain = "server";
 
-          useRelay = true;
-          relayAuthSecretFile = "/etc/netbird/relay-secret";
+          relay.enable = true;
+          relay.authSecretFile = "/etc/netbird/relay-secret";
 
           management.settings.DataStoreEncryptionKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
           # Geolocation downloads a database on startup, which fails in the

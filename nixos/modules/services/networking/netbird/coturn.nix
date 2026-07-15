@@ -32,7 +32,7 @@ in
 
 {
   options.services.netbird.server.coturn = {
-    enable = mkEnableOption "a Coturn server for Netbird, will also open the firewall on the configured range";
+    enable = mkEnableOption "A coturn TURN/STUN server for NetBird (legacy; superseded by the native relay, services.netbird.server.relay.enable). Also opens the firewall on the configured range";
 
     useAcmeCertificates = mkOption {
       type = bool;

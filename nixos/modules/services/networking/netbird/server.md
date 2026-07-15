@@ -58,8 +58,8 @@ NetBird v0.28+ introduced a modern relay server that replaces Coturn with better
     ingress.nginx.enable = true;
 
     # Use the modern relay instead of Coturn
-    useRelay = true;
-    relayAuthSecretFile = "/run/secrets/relay-auth";
+    relay.enable = true;
+    relay.authSecretFile = "/run/secrets/relay-auth";
 
     management = {
       oidcConfigEndpoint = "https://sso.example.selfhosted/oauth2/openid/netbird/.well-known/openid-configuration";
@@ -243,8 +243,8 @@ Here's a complete example using the modern relay server with an external identit
       };
     };
 
-    useRelay = true;
-    relayAuthSecretFile = "/run/secrets/netbird/relay-auth";
+    relay.enable = true;
+    relay.authSecretFile = "/run/secrets/netbird/relay-auth";
 
     management = {
       oidcConfigEndpoint = "https://auth.example.com/.well-known/openid-configuration";

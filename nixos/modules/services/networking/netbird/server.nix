@@ -4,12 +4,14 @@ let
   inherit (lib)
     attrValues
     getAttrFromPath
+    intersectLists
     mkChangedOptionModule
     mkDefault
     mkEnableOption
     mkIf
     mkMerge
     mkOption
+    optional
     optionalAttrs
     ;
 
@@ -259,34 +261,48 @@ in
       type = str;
       description = "The domain under which the netbird server runs.";
     };
-
-    useRelay = mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = ''
-        Use the modern relay server instead of (or in addition to) Coturn.
-        When enabled, the relay server will be configured automatically.
-      '';
-    };
-
-    relayAuthSecretFile = mkOption {
-      type = nullOr path;
-      default = null;
-      description = ''
-        Path to the shared authentication secret for the relay server.
-        This secret must be provided when useRelay is enabled.
-        It will be used by both the relay server and management server.
-      '';
-    };
   };
 
   config = mkIf cfg.enable {
-    assertions = [
-      {
-        assertion = cfg.useRelay -> cfg.relayAuthSecretFile != null;
-        message = "relayAuthSecretFile must be set when useRelay is enabled";
-      }
-    ];
+    assertions =
+      let
+        # The relay's embedded STUN and coturn both default to UDP 3478, so their
+        # STUN listeners collide when both run on one host. coturn additionally
+        # binds alt-listening-port (listening-port + 1) for RFC 5780 NAT-behaviour
+        # discovery.
+        coturnUdpPorts = with config.services.coturn; [
+          listening-port
+          alt-listening-port
+        ];
+        collidingStunPorts = intersectLists cfg.relay.stun.ports coturnUdpPorts;
+        stunCoturnCollision =
+          cfg.relay.enable && cfg.relay.stun.enable && cfg.coturn.enable && collidingStunPorts != [ ];
+      in
+      [
+        {
+          assertion = !stunCoturnCollision;
+          message = ''
+            services.netbird.server: the relay's embedded STUN server and coturn both bind
+            UDP ${toString collidingStunPorts} on this host. Resolve the collision with one of:
+              - services.netbird.server.relay.stun.enable = false;  # keep only coturn's STUN
+              - services.netbird.server.relay.stun.ports = [ <free-udp-port> ];
+              - services.coturn.listening-port = <free-udp-port>;
+          '';
+        }
+      ];
+
+    warnings =
+      let
+        # By default management advertises stun:${turnDomain}:3478 pointing at this
+        # host. A delegated turnDomain or an emptied settings.Stuns means STUN is
+        # not meant to be served locally, so a missing local STUN listener is not a
+        # misconfiguration.
+        advertisesLocalStun =
+          cfg.management.turnDomain == cfg.domain && (cfg.management.settings.Stuns or null) != [ ];
+        danglingStunAdvertisement =
+          cfg.relay.enable && !cfg.relay.stun.enable && !cfg.coturn.enable && advertisesLocalStun;
+      in
+      optional danglingStunAdvertisement "services.netbird.server: the management server advertises a STUN endpoint (stun:${cfg.management.turnDomain}:3478) but no local STUN server is enabled (relay.stun and coturn are both off). Enable services.netbird.server.relay.stun, enable coturn, or point management.turnDomain at a host that answers STUN.";
 
     services.netbird.server = {
       dashboard = {
@@ -322,9 +338,9 @@ in
           ];
         };
       })
-      // (optionalAttrs cfg.useRelay {
+      // (optionalAttrs cfg.relay.enable {
         relayAddresses = mkDefault [ "rels://${cfg.domain}:443" ];
-        relaySecretFile = mkDefault cfg.relayAuthSecretFile;
+        relaySecretFile = mkDefault cfg.relay.authSecretFile;
       });
 
       signal = {
@@ -332,10 +348,8 @@ in
         enable = mkDefault cfg.enable;
       };
 
-      relay = mkIf cfg.useRelay {
-        enable = mkDefault true;
+      relay = mkIf cfg.relay.enable {
         exposedAddress = mkDefault "rels://${cfg.domain}:443";
-        authSecretFile = mkDefault cfg.relayAuthSecretFile;
       };
 
       coturn = {
