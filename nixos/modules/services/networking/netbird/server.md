@@ -1,10 +1,10 @@
-# Netbird server {#module-services-netbird-server}
+# NetBird server {#module-services-netbird-server}
 
 NetBird is a VPN built on top of WireGuard® making it easy to create secure private networks for your organization or home.
 
 ## Quickstart {#module-services-netbird-server-quickstart}
 
-To fully setup Netbird as a self-hosted server, you need an identity provider (or use the embedded IDP) and either a Coturn server or the modern relay server. The list of supported SSOs and their setup are available [on Netbird's documentation](https://docs.netbird.io/selfhosted/selfhosted-guide#step-3-configure-identity-provider-idp).
+To fully setup NetBird as a self-hosted server, you need an identity provider (or use the embedded IDP) and either a Coturn server or the modern relay server. The list of supported SSOs and their setup are available [on NetBird's documentation](https://docs.netbird.io/selfhosted/selfhosted-guide#step-3-configure-identity-provider-idp).
 
 ### Minimal Configuration with Coturn {#module-services-netbird-server-quickstart-coturn}
 

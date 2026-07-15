@@ -222,7 +222,7 @@ in
   ];
 
   options.services.netbird.server.management = {
-    enable = mkEnableOption "Netbird Management Service";
+    enable = mkEnableOption "NetBird Management Service";
 
     package = mkPackageOption pkgs "netbird-management" { };
 
@@ -530,7 +530,7 @@ in
       default = { };
 
       description = ''
-        Configuration of the netbird management server.
+        Configuration of the NetBird management server.
         Options containing secret data should be set to an attribute set containing the attribute _secret
         - a string pointing to a file containing the value the option should be set to.
         See the example to get a better picture of this: in the resulting management.json file,
@@ -552,7 +552,7 @@ in
         "DEBUG"
       ];
       default = "INFO";
-      description = "Log level of the netbird services.";
+      description = "Log level of the NetBird services.";
     };
   };
 
@@ -648,7 +648,7 @@ in
     ];
 
     systemd.services.netbird-management = {
-      description = "The management server for Netbird, a wireguard VPN";
+      description = "The management server for NetBird, a wireguard VPN";
       documentation = [ "https://netbird.io/docs/" ];
 
       after = [ "network.target" ];

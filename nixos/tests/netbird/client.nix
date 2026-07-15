@@ -48,7 +48,7 @@
 
         2025-08-11T15:03:25Z ERRO shared/management/client/grpc.go:65: failed creating connection to Management Service: context deadline exceeded
   */
-  # TODO: confirm the whole solution is working end-to-end when netbird server is implemented
+  # TODO: confirm the whole solution is working end-to-end when NetBird server is implemented
   testScript = ''
     import textwrap
     import time

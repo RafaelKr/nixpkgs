@@ -35,7 +35,7 @@ in
 
 {
   options.services.netbird.server.dashboard = {
-    enable = mkEnableOption "the static netbird dashboard frontend";
+    enable = mkEnableOption "the static NetBird dashboard frontend";
 
     package = mkPackageOption pkgs "netbird-dashboard" { };
 

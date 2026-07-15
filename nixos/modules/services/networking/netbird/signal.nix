@@ -34,7 +34,7 @@ in
 
 {
   options.services.netbird.server.signal = {
-    enable = mkEnableOption "Netbird's Signal Service";
+    enable = mkEnableOption "NetBird's Signal Service";
 
     package = mkPackageOption pkgs "netbird-signal" { };
 
@@ -106,7 +106,7 @@ in
         "DEBUG"
       ];
       default = "INFO";
-      description = "Log level of the netbird signal service.";
+      description = "Log level of the NetBird signal service.";
     };
   };
 
@@ -134,7 +134,7 @@ in
     ];
 
     systemd.services.netbird-signal = {
-      description = "The signal server for Netbird, a wireguard VPN";
+      description = "The signal server for NetBird, a wireguard VPN";
       documentation = [ "https://netbird.io/docs/" ];
 
       after = [ "network.target" ];
