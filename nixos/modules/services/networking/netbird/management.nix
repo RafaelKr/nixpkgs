@@ -585,9 +585,6 @@ in
           }
         ]
       ++
-        optional (cfg.environment.NB_DISABLE_GEOLOCATION != true)
-          "netbird-management: geolocation is enabled; it downloads the GeoLite2-City database on startup and fails to start without network access or a database pre-provisioned in its data directory. Set services.netbird.server.management.environment.NB_DISABLE_GEOLOCATION = true for air-gapped deployments."
-      ++
         optional
           (
             (cfg.settings.StoreConfig.Engine or null) != null
@@ -651,7 +648,11 @@ in
       description = "The management server for NetBird, a wireguard VPN";
       documentation = [ "https://netbird.io/docs/" ];
 
-      after = [ "network.target" ];
+      # Geolocation downloads the GeoLite2 databases on first start, which needs
+      # DNS/outbound access; wait for the network to be online so a cold-boot
+      # download resolves instead of failing before DNS is ready.
+      wants = [ "network-online.target" ];
+      after = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
       restartTriggers = [ managementFile ];
 
