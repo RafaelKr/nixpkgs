@@ -33,7 +33,7 @@ in
 
 {
   options.services.netbird.server.relay = {
-    enable = mkEnableOption "NetBird Relay Server";
+    enable = mkEnableOption "NetBird's native relay server, the modern and recommended replacement for coturn";
 
     package = mkPackageOption pkgs "netbird-relay" { };
 
@@ -60,7 +60,10 @@ in
       description = ''
         Path to a file containing the relay authentication secret.
         The file should contain only the raw secret value.
-        This must match the relaySecretFile configured in the management server.
+        This must match the relaySecretFile configured in the management server;
+        when the full server stack is used
+        ({option}`services.netbird.server.enable`), the management server's
+        relaySecretFile is derived from this automatically.
       '';
     };
 
