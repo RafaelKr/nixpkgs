@@ -7,4 +7,5 @@
   server-relay = runTest ./server-relay.nix;
   server-relay-coturn = runTest ./server-relay-coturn.nix;
   server-ingress = runTest ./server-ingress.nix;
+  server-ingress-traefik = runTest ./server-ingress-traefik.nix;
 }
