@@ -218,5 +218,13 @@ in
       path = "/signalexchange.SignalExchange/";
       backend.grpc.upstream = "127.0.0.1:${toString cfg.port}";
     };
+
+    # NetBird signal WebSocket-proxy route (v0.74.6): "/ws-proxy/signal" — gRPC
+    # over WebSocket for browser/WASM clients (not the reverse-proxy feature).
+    # https://github.com/netbirdio/netbird/blob/v0.74.6/infrastructure_files/getting-started.sh#L861-L867
+    services.netbird.server.ingressRoutes.signal-wsproxy = {
+      path = "/ws-proxy/signal";
+      backend.websocket.upstream = "127.0.0.1:${toString cfg.port}";
+    };
   };
 }
