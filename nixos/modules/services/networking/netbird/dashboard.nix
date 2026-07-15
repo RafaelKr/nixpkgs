@@ -123,6 +123,13 @@ in
           {
             nativeBuildInputs = [ pkgs.gettext ];
             env = {
+              # Runtime config placeholders the dashboard expects, mirroring its
+              # own docker entrypoint (netbirdio/dashboard v2.90.3,
+              # docker/init_react_envs.sh). Keep this in sync when bumping the
+              # dashboard: a var missing here stays a literal "$VAR" in the built
+              # assets, and the SPA then treats the placeholder as a real value
+              # (e.g. a leftover NETBIRD_AUTH_SERVICE_URL makes the dashboard
+              # request GET /$NETBIRD_AUTH_SERVICE_URL/service/idp -> 404).
               ENV_STR = concatStringsSep " " [
                 "$AUTH_AUDIENCE"
                 "$AUTH_AUTHORITY"
@@ -131,10 +138,20 @@ in
                 "$AUTH_REDIRECT_URI"
                 "$AUTH_SILENT_REDIRECT_URI"
                 "$AUTH_SUPPORTED_SCOPES"
+                "$NETBIRD_AGENT_NETWORK_ENABLED"
+                "$NETBIRD_AGENT_NETWORK_ONLY"
+                "$NETBIRD_ANALYTICS_EXCLUDED_EMAILS"
+                "$NETBIRD_AUTH_SERVICE_URL"
+                "$NETBIRD_CLOUD"
                 "$NETBIRD_DRAG_QUERY_PARAMS"
                 "$NETBIRD_GOOGLE_ANALYTICS_ID"
                 "$NETBIRD_GOOGLE_TAG_MANAGER_ID"
                 "$NETBIRD_HOTJAR_TRACK_ID"
+                "$NETBIRD_HUBSPOT_ONBOARDING_FORM_ID"
+                "$NETBIRD_HUBSPOT_PORTAL_ID"
+                "$NETBIRD_HUBSPOT_SIGNUP_FORM_ID"
+                "$NETBIRD_HUBSPOT_SURVEY_FORM_ID"
+                "$NETBIRD_LICENSED"
                 "$NETBIRD_MGMT_API_ENDPOINT"
                 "$NETBIRD_MGMT_GRPC_API_ENDPOINT"
                 "$NETBIRD_TOKEN_SOURCE"
