@@ -101,6 +101,9 @@
   "module-services-netbird-server-relay-vs-coturn": [
     "index.html#module-services-netbird-server-relay-vs-coturn"
   ],
+  "module-services-netbird-server-reverse-proxy": [
+    "index.html#module-services-netbird-server-reverse-proxy"
+  ],
   "module-services-tandoor-recipes-migrating-media-option-move": [
     "index.html#module-services-tandoor-recipes-migrating-media-option-move",
     "index.html#module-services-tandoor-recipes-migrating-media-option-1"

@@ -86,6 +86,7 @@ NetBird v0.28+ introduced a modern relay server that replaces Coturn with better
 
 The ingress terminates TLS for `domain` and routes each plane — dashboard, management API and gRPC, signal, relay — to the component that serves it.
 NetBird's own documentation calls this the [external reverse proxy](https://docs.netbird.io/selfhosted/external-reverse-proxy).
+It is not to be confused with the [NetBird Reverse Proxy](#module-services-netbird-server-reverse-proxy) component, which publishes your own applications over the mesh.
 
 `ingress` is a tagged union, so exactly one backend is selected.
 Enable it and configure the virtual host through the backend's own `settings`:
@@ -220,6 +221,46 @@ The relay server can be configured independently. Advanced TLS settings (Let's E
       "/path/to/key.pem"
     ];
   };
+}
+```
+
+### NetBird Reverse Proxy {#module-services-netbird-server-reverse-proxy}
+
+The NetBird reverse proxy (`server.reverseProxy`) exposes NetBird network resources over the public internet. It terminates TLS on its own listener and forwards traffic to backends over the WireGuard tunnel, so resources are reached at `<subdomain>.<proxy-domain>` — the operator must create a wildcard DNS record `*.<proxy-domain>` pointing at the host.
+
+On a single-IP host the ingress front already owns `:443`, so the proxy listens on `:8443` and is reached through the [Traefik backend](#opt-services.netbird.server.ingress.traefik.enable), which L4 SNI-passthroughs any otherwise-unmatched SNI to it (nginx cannot forward TLS, so the proxy requires the Traefik backend there). Enabling `server.reverseProxy` without an ingress leaves the proxy owning its port directly, for a dedicated host.
+
+The proxy authenticates to management with an access token minted out-of-band (`netbird-mgmt token create` or the reverse-proxy REST API) and provided through `reverseProxy.tokenFile`.
+
+```nix
+{ config, ... }:
+
+{
+  services.netbird.server = {
+    enable = true;
+    domain = "netbird.example.com";
+
+    ingress.traefik = {
+      enable = true;
+      acme.email = "admin@example.com";
+    };
+
+    reverseProxy = {
+      enable = true;
+      domain = "proxy.netbird.example.com";
+      tokenFile = "/run/secrets/netbird/proxy-token";
+
+      # Recover the real client IP across the Traefik L4 passthrough.
+      proxyProtocol = true;
+      trustedProxies = "127.0.0.1/32";
+    };
+  };
+
+  # When the proxy runs on the same host as management, dialing the public
+  # management domain hairpins out to the public IP and back; a loopback
+  # override reaches the local Traefik front directly (the certificate still
+  # validates because the SNI matches the domain).
+  networking.hosts."127.0.0.1" = [ config.services.netbird.server.domain ];
 }
 ```
 

@@ -773,6 +773,16 @@ in
         path = "/ws-proxy/management";
         backend.websocket.upstream = "127.0.0.1:${toString cfg.port}";
       };
+
+      # NetBird reverse-proxy control-plane route: the netbird-proxy's gRPC
+      # service, served on the management listener alongside ManagementService
+      # (management/internals/server/boot.go RegisterProxyServiceServer). Added
+      # unconditionally: a split-host management node has no server.reverseProxy to gate
+      # on, and the service is token-gated server-side.
+      management-proxyservice = {
+        path = "/management.ProxyService/";
+        backend.grpc.upstream = "127.0.0.1:${toString cfg.port}";
+      };
     }
     // optionalAttrs embeddedIdpEnabled {
       # The embedded IdP is served by the management server under /oauth2.
