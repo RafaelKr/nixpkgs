@@ -1331,6 +1331,9 @@
   "module-services-netbird-server-quickstart": [
     "index.html#module-services-netbird-server-quickstart"
   ],
+  "module-services-netbird-server-reverse-proxy": [
+    "index.html#module-services-netbird-server-reverse-proxy"
+  ],
   "module-services-netbird": [
     "index.html#module-services-netbird"
   ],

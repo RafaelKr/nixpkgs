@@ -136,6 +136,7 @@ in
     ./dashboard.nix
     ./management.nix
     ./relay.nix
+    ./reverse-proxy.nix
     ./signal.nix
   ]
   # Backward compat: the released `enableNginx` booleans (server-level and
