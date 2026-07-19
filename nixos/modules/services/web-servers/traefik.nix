@@ -38,7 +38,6 @@ let
     optional
     optionalAttrs
     recursiveUpdate
-    remove
     splitStringBy
     ;
 
@@ -292,15 +291,17 @@ in
           :::
         '';
       };
-      # TODO: Drop in 27.05.
       settings = mkOption {
-        type = format.type;
+        type = attrsOf format.type;
         description = ''
-          Routing configuration for Traefik, written in Nix.
-          This option is intended for easily migrating pre-26.11 Traefik configurations, and will be removed in NixOS 27.05.
+          Routing configuration for Traefik, written in Nix. This is where this
+          machine's own routing configuration belongs; other NixOS modules should
+          contribute through {option}`services.traefik.routing.files` instead,
+          so each contribution stays identifiable and can be overridden on its own.
 
           ::: {.note}
-          Configurations added here will be translated into a file for {option}`services.traefik.routing.files`, named `custom-migrated`.
+          This is serialized to JSON (which is valid YAML) at build and linked into
+          {option}`services.traefik.routing.dir` for Traefik's file provider to watch.
           :::
         '';
         default = { };
@@ -447,10 +448,11 @@ in
         '';
       }
       {
-        assertion = !(isDefault "routing.files") -> cfg.routing.dir != null;
+        assertion = (cfg.routing.files != { } || cfg.routing.settings != { }) -> cfg.routing.dir != null;
         message = ''
-          'services.traefik.routing.files' requires the routing file provider to be set
-          to a directory. Please set a path for 'services.traefik.routing.dir'.
+          'services.traefik.routing.files' and 'services.traefik.routing.settings' require the
+          routing file provider to be set to a directory. Please set a path for
+          'services.traefik.routing.dir'.
         '';
       }
       {
@@ -467,21 +469,6 @@ in
     warnings =
       optional (!(builtins.elem "docker" cfg.supplementaryGroups -> config.virtualisation.docker.enable))
         "'services.traefik.supplementaryGroups' contains the 'docker' group, but 'virtualisation.docker.enable' is not enabled."
-      ++ optional (!(isDefault "routing.settings")) ''
-        'services.traefik.routing.settings' is in use, but that option is deprecated.
-        Please migrate your configuration to an explicit file instead.
-
-        You may do so by moving the value of 'services.traefik.routing.settings' to
-        'services.traefik.routing.files.<name>.settings', where <name> is an arbitrary
-        string that ideally identifies the configuration's purpose.
-
-        The following files define 'services.traefik.routing.settings' and should be migrated:
-          - ${
-            concatStringsSep "\n  - " (
-              remove ./traefik.nix (map (attr: attr.file) opt.routing.settings.definitionsWithLocations)
-            )
-          }
-      ''
       ++ optional (!builtins.all id (map (plugin: plugin._isTraefikPlugin or false) cfg.localPlugins)) ''
         Some of the Traefik local plugins in 'services.traefik.localPlugins' may be misconfigured.
         The following paths are built from derivations that do not have the '_isTraefikPlugin' attribute set to 'true':
@@ -496,10 +483,6 @@ in
     boot.kernel.sysctl = {
       "net.core.rmem_max" = 2500000;
       "net.core.wmem_max" = 2500000;
-    };
-
-    services.traefik.routing.files = mkIf (cfg.install ? settings && !(isDefault "routing.settings")) {
-      "custom-migrated".settings = cfg.routing.settings;
     };
 
     systemd.services.traefik = {
@@ -551,21 +534,30 @@ in
           mode = if cfg.user == "traefik" then "0700" else "0770";
         };
       })
+      # A custom user manages their own routing dir; only create it for the default user.
+      # Only Traefik reads this directory and ReadOnlyPaths already forbids writing to it,
+      # so it gets the minimum: owner read and traverse.
+      (mkIf (cfg.routing.dir != null && cfg.user == "traefik") {
+        ${cfg.routing.dir}.d = {
+          inherit (cfg) user group;
+          mode = "0500";
+        };
+      })
       (mkIf (cfg.routing.dir != null) (
         {
-          ${cfg.routing.dir}.d = {
-            inherit (cfg) user group;
-            mode = "0700";
-          };
           "${cfg.routing.dir}/_nixos-*".r = { };
         }
+        // optionalAttrs (cfg.routing.settings != { }) {
+          "${cfg.routing.dir}/_nixos-settings.yml"."L+".argument = toString (
+            format.generate "routing_config.json" cfg.routing.settings
+          );
+        }
+        # The `_nixos-extra-` prefix is a separate namespace from `_nixos-settings.yml`,
+        # so a files entry named "settings" cannot collide with the settings file.
         // (mapAttrs' (
           name: value:
-          nameValuePair "${cfg.routing.dir}/_nixos-${name}.yml" {
-            "L+" = {
-              mode = "0444";
-              argument = toString (format.generate name value.settings);
-            };
+          nameValuePair "${cfg.routing.dir}/_nixos-extra-${name}.yml" {
+            "L+".argument = toString (format.generate name value.settings);
           }
         ) cfg.routing.files)
       ))
