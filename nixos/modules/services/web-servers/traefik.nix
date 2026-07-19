@@ -421,7 +421,7 @@ in
         The following paths are built from derivations that do not have the '_isTraefikPlugin' attribute set to 'true':
         - ${
           concatMapStringsSep "\n- " (badPlugin: badPlugin.outPath) (
-            filter (plugin: plugin._isTraefikPlugin or false) cfg.localPlugins
+            filter (plugin: !(plugin._isTraefikPlugin or false)) cfg.localPlugins
           )
         }
       '';
