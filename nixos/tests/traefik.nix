@@ -98,8 +98,10 @@
         )
 
     with subtest("Check that routing configuration works"):
-        assert "Directory listing for " in client.succeed(
-            "curl -sSf -H Host:simplehttp.traefik.test http://traefik/"
+        # READY does not mean routes are loaded: the file provider loads them
+        # in a background goroutine. timeout=60 absorbs load variance.
+        assert "Directory listing for " in client.wait_until_succeeds(
+            "curl -sSf -H Host:simplehttp.traefik.test http://traefik/", timeout=60
         )
   '';
 }
