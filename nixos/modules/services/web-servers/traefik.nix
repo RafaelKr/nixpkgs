@@ -69,9 +69,9 @@ let
     else
       format.generate "install_config.json" (
         recursiveUpdate cfg.install.settings (
-          optionalAttrs (cfg.localPlugins != [ ]) {
+          optionalAttrs (cfg.localPluginPackages != [ ]) {
             experimental.localPlugins = lib.listToAttrs (
-              map (plugin: nameValuePair plugin.plugin { inherit (plugin) moduleName; }) cfg.localPlugins
+              map (plugin: nameValuePair plugin.plugin { inherit (plugin) moduleName; }) cfg.localPluginPackages
             );
           }
           // optionalAttrs (resolvedProviderFile != { }) {
@@ -216,7 +216,7 @@ in
             ::: {.note}
             The `providers.file` block is derived from {option}`services.traefik.routing`; do not
             set `providers.file` here. `experimental.localPlugins` entries are generated from
-            {option}`services.traefik.localPlugins`, but you may still add per-plugin `settings`
+            {option}`services.traefik.localPluginPackages`, but you may still add per-plugin `settings`
             (such as `envs` and `mounts`) here.
             :::
           '';
@@ -415,7 +415,7 @@ in
         };
       };
     };
-    localPlugins = mkOption {
+    localPluginPackages = mkOption {
       default = [ ];
       type = listOf package;
       example = literalExpression "[ pkgs.fosrl-badger pkgs.geoblock ]";
@@ -515,7 +515,7 @@ in
             cfg.routing.provider == null
             && cfg.routing.settings == { }
             && cfg.routing.files == { }
-            && cfg.localPlugins == [ ]
+            && cfg.localPluginPackages == [ ]
           );
         message = ''
           None of the declarative configuration options may be used if Traefik is
@@ -527,7 +527,7 @@ in
                 optional (cfg.routing.provider != null) "'services.traefik.routing.provider'"
                 ++ optional (cfg.routing.settings != { }) "'services.traefik.routing.settings'"
                 ++ optional (cfg.routing.files != { }) "'services.traefik.routing.files'"
-                ++ optional (cfg.localPlugins != [ ]) "'services.traefik.localPlugins'"
+                ++ optional (cfg.localPluginPackages != [ ]) "'services.traefik.localPluginPackages'"
               )
             }
         '';
@@ -574,15 +574,17 @@ in
     warnings =
       optional (!(builtins.elem "docker" cfg.supplementaryGroups -> config.virtualisation.docker.enable))
         "'services.traefik.supplementaryGroups' contains the 'docker' group, but 'virtualisation.docker.enable' is not enabled."
-      ++ optional (!builtins.all id (map (plugin: plugin._isTraefikPlugin or false) cfg.localPlugins)) ''
-        Some of the Traefik local plugins in 'services.traefik.localPlugins' may be misconfigured.
-        The following paths are built from derivations that do not have the '_isTraefikPlugin' attribute set to 'true':
-        - ${
-          concatMapStringsSep "\n- " (badPlugin: badPlugin.outPath) (
-            filter (plugin: !(plugin._isTraefikPlugin or false)) cfg.localPlugins
-          )
-        }
-      '';
+      ++
+        optional (!builtins.all id (map (plugin: plugin._isTraefikPlugin or false) cfg.localPluginPackages))
+          ''
+            Some of the Traefik local plugins in 'services.traefik.localPluginPackages' may be misconfigured.
+            The following paths are built from derivations that do not have the '_isTraefikPlugin' attribute set to 'true':
+            - ${
+              concatMapStringsSep "\n- " (badPlugin: badPlugin.outPath) (
+                filter (plugin: !(plugin._isTraefikPlugin or false)) cfg.localPluginPackages
+              )
+            }
+          '';
 
     # https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes
     boot.kernel.sysctl = {
@@ -675,14 +677,14 @@ in
           }
         ) cfg.routing.files)
       ))
-      (mkIf (cfg.localPlugins != [ ]) {
+      (mkIf (cfg.localPluginPackages != [ ]) {
         "${cfg.dataDir}/plugins-local"."L+" = {
           inherit (cfg) user group;
           mode = "0700";
           argument = toString (
             pkgs.symlinkJoin {
               name = "traefik-plugins";
-              paths = cfg.localPlugins;
+              paths = cfg.localPluginPackages;
             }
           );
         };

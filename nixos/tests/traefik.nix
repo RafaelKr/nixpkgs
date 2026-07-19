@@ -152,7 +152,7 @@
       {
         services.traefik = {
           enable = true;
-          localPlugins = [
+          localPluginPackages = [
             (pkgs.runCommandLocal "traefik-plugin-stub" {
               passthru = {
                 plugin = "wasm-plugin-name";
