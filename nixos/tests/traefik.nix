@@ -1,6 +1,6 @@
 # verifies:
 #   1. file-mode and directory-mode routing config generation, including
-#      per-entry routing.files merging.
+#      per-entry routing.extraFiles merging.
 #   2. the generated --configfile content (install.settings, the injected
 #      providers.file block, plugin registration).
 #   3. 1:1 structural rendering of Traefik v3.7 docs examples.
@@ -60,7 +60,7 @@
       };
 
     # File mode (content-sensing default) with an explicit non-default path: routing.settings and
-    # every routing.files entry are merged into the single generated file linked at
+    # every routing.extraFiles entry are merged into the single generated file linked at
     # /etc/traefik/custom-routes.yml, which providers.file.filename must follow.
     declare = {
       services.traefik = {
@@ -80,7 +80,7 @@
 
           provider.file.path = "/etc/traefik/custom-routes.yml";
 
-          files."extradeclare".settings = {
+          extraFiles."extradeclare".settings = {
             http.routers."extradeclarehttp" = {
               rule = "Host(`extradeclarehttp.declare`)";
               entryPoints = [ "web" ];
@@ -95,7 +95,7 @@
       };
     };
 
-    # Directory mode: routing.settings lands as _nixos-settings.yml and each routing.files entry
+    # Directory mode: routing.settings lands as _nixos-settings.yml and each routing.extraFiles entry
     # as its own _nixos-extra-<name>.yml, loaded without overwriting each other.
     extra = {
       services.traefik = {
@@ -115,7 +115,7 @@
 
           provider.directory.path = "/etc/traefik/routing";
 
-          files."extrahttp1".settings = {
+          extraFiles."extrahttp1".settings = {
             http.routers."extrahttp1" = {
               rule = "Host(`extrahttp1.extra`)";
               entryPoints = [ "web" ];
@@ -127,7 +127,7 @@
             ];
           };
 
-          files."extrahttp2".settings = {
+          extraFiles."extrahttp2".settings = {
             http.routers."extrahttp2" = {
               rule = "Host(`extrahttp2.extra`)";
               entryPoints = [ "web" ];
@@ -217,7 +217,7 @@
       };
     };
 
-    # Test objective: directory mode renders each routing.files entry to its own
+    # Test objective: directory mode renders each routing.extraFiles entry to its own
     # _nixos-extra-<name>.yml, each 1:1 with a file-provider example from the same docs page:
     # multiple routers/services, middlewares + TLS options, and the http.yml + tls.yml split of the
     # "loading multiple dynamic configuration files" example.
@@ -227,7 +227,7 @@
         enable = true;
         routing = {
           provider.directory.path = "/etc/traefik/dynamic";
-          files = {
+          extraFiles = {
             # Example: specifying more than one router and service
             "example2".settings = {
               http.routers.app = {
@@ -384,13 +384,13 @@
       with subtest("Serve routing.settings from the single generated file"):
           assert_routed("declarativehttp.declare", declare)
 
-      with subtest("Merge a routing.files entry into the single generated file and serve it"):
+      with subtest("Merge a routing.extraFiles entry into the single generated file and serve it"):
           assert_routed("extradeclarehttp.declare", declare)
 
-      with subtest("Serve the first directory-mode routing.files entry"):
+      with subtest("Serve the first directory-mode routing.extraFiles entry"):
           assert_routed("extrahttp1.extra", extra)
 
-      with subtest("Serve the second directory-mode routing.files entry (no overwrite)"):
+      with subtest("Serve the second directory-mode routing.extraFiles entry (no overwrite)"):
           assert_routed("extrahttp2.extra", extra)
 
       with subtest("Serve routing.settings written into the directory"):
@@ -472,7 +472,7 @@
               "routing example 1",
           )
 
-      with subtest("directory mode renders each routing.files entry 1:1 to its file-provider example"):
+      with subtest("directory mode renders each routing.extraFiles entry 1:1 to its file-provider example"):
           assert_renders_verbatim(
               docdir.succeed("cat /etc/traefik/dynamic/_nixos-extra-example2.yml"),
               """

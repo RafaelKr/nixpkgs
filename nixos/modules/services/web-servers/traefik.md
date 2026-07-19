@@ -31,14 +31,14 @@ reads it.
 - The {option}`services.traefik.routing.settings` option lets you declare the
   routing configuration directly in the NixOS configuration.
 
-- The {option}`services.traefik.routing.files` option takes the same
+- The {option}`services.traefik.routing.extraFiles` option takes the same
   configuration under a name. This is where other NixOS modules should
   contribute: each entry stays identifiable and can be overridden on its own.
 
 - The {option}`services.traefik.routing.provider` option selects where Traefik's
   file provider reads that configuration from: a single generated `file`, a
   user-managed `externalFile`, or a watched `directory`. A directory keeps each
-  `files` entry in its own file and lets you drop in imperative files alongside
+  `extraFiles` entry in its own file and lets you drop in imperative files alongside
   them; a single file has them all merged into one. Left unset, a file is
   generated when either option is present.
 
@@ -137,4 +137,4 @@ ACME secrets for setting up DNS-01 challenges.
 
 ## Migrating to 26.11 {#module-services-traefik-migrating-to-26.11}
 
-The Traefik module now features new ways to deploy the routing and install configuration files. Move your existing declarative install and routing configurations to `services.traefik.install.settings` and `services.traefik.routing.settings` respectively. Named `services.traefik.routing.files."my-application".settings` entries are for routing configuration that has to stay individually identifiable; other NixOS modules should contribute there rather than to `services.traefik.routing.settings`. The option to use `EnvSubst` to substitute environment variables has been removed, as using environment variables to store secrets is already supported by the {option}`services.traefik.environmentFiles`.
+The Traefik module now features new ways to deploy the routing and install configuration files. Move your existing declarative install and routing configurations to `services.traefik.install.settings` and `services.traefik.routing.settings` respectively. Named `services.traefik.routing.extraFiles."my-application".settings` entries are for routing configuration that has to stay individually identifiable; other NixOS modules should contribute there rather than to `services.traefik.routing.settings`. The option to use `EnvSubst` to substitute environment variables has been removed, as using environment variables to store secrets is already supported by the {option}`services.traefik.environmentFiles`.

@@ -82,14 +82,14 @@ let
 
   isManagedDir = cfg.routing.provider ? directory;
 
-  # A directory gives every `files` entry its own file; a single file has nowhere else to put
+  # A directory gives every `extraFiles` entry its own file; a single file has nowhere else to put
   # them, so they are merged into it.
   routingSettings =
     if isManagedDir then
       cfg.routing.settings
     else
       foldl' recursiveUpdate cfg.routing.settings (
-        map (entry: entry.settings) (attrValues cfg.routing.files)
+        map (entry: entry.settings) (attrValues cfg.routing.extraFiles)
       );
 
   # JSON is considered valid YAML by Traefik, so this generated JSON is linked under a `.yml`
@@ -260,8 +260,9 @@ in
           };
         in
         mkOption {
-          default = if cfg.routing.settings == { } && cfg.routing.files == { } then null else { file = { }; };
-          defaultText = literalExpression "if routing.settings == { } && routing.files == { } then null else { file = { }; }";
+          default =
+            if cfg.routing.settings == { } && cfg.routing.extraFiles == { } then null else { file = { }; };
+          defaultText = literalExpression "if routing.settings == { } && routing.extraFiles == { } then null else { file = { }; }";
           example = {
             file.path = "/etc/traefik/routing.yml";
           };
@@ -274,7 +275,7 @@ in
             file = mkOption {
               description = ''
                 NixOS-managed single file. {option}`services.traefik.routing.settings` and every
-                {option}`services.traefik.routing.files` entry are merged into it and linked at `path`.
+                {option}`services.traefik.routing.extraFiles` entry are merged into it and linked at `path`.
               '';
               type = submodule {
                 options = {
@@ -312,7 +313,7 @@ in
 
                 ::: {.note}
                 {option}`services.traefik.routing.settings` is written to `_nixos-settings.yml` and
-                each {option}`services.traefik.routing.files` entry to `_nixos-extra-<name>.yml`;
+                each {option}`services.traefik.routing.extraFiles` entry to `_nixos-extra-<name>.yml`;
                 you may add your own files too.
                 :::
               '';
@@ -343,7 +344,7 @@ in
             };
           });
         };
-      files = mkOption {
+      extraFiles = mkOption {
         type = attrsOf (submodule {
           options.settings = mkOption {
             type = attrsOf format.type;
@@ -398,7 +399,7 @@ in
         description = ''
           Routing configuration for Traefik, written in Nix. This is where this
           machine's own routing configuration belongs; other NixOS modules should
-          contribute through {option}`services.traefik.routing.files` instead,
+          contribute through {option}`services.traefik.routing.extraFiles` instead,
           so each contribution stays identifiable and can be overridden on its own.
 
           ::: {.note}
@@ -514,7 +515,7 @@ in
           -> (
             cfg.routing.provider == null
             && cfg.routing.settings == { }
-            && cfg.routing.files == { }
+            && cfg.routing.extraFiles == { }
             && cfg.localPluginPackages == [ ]
           );
         message = ''
@@ -526,7 +527,7 @@ in
               concatStringsSep "\n  - " (
                 optional (cfg.routing.provider != null) "'services.traefik.routing.provider'"
                 ++ optional (cfg.routing.settings != { }) "'services.traefik.routing.settings'"
-                ++ optional (cfg.routing.files != { }) "'services.traefik.routing.files'"
+                ++ optional (cfg.routing.extraFiles != { }) "'services.traefik.routing.extraFiles'"
                 ++ optional (cfg.localPluginPackages != [ ]) "'services.traefik.localPluginPackages'"
               )
             }
@@ -542,20 +543,21 @@ in
       }
       {
         assertion =
-          cfg.routing.provider ? externalFile -> (cfg.routing.settings == { } && cfg.routing.files == { });
+          cfg.routing.provider ? externalFile
+          -> (cfg.routing.settings == { } && cfg.routing.extraFiles == { });
         message = ''
           'services.traefik.routing.provider.externalFile' is managed imperatively and
           cannot serve 'services.traefik.routing.settings' or
-          'services.traefik.routing.files'. Use 'file' or 'directory' instead.
+          'services.traefik.routing.extraFiles'. Use 'file' or 'directory' instead.
         '';
       }
       {
         # The content-sensing default is never null while routing configuration exists, so this
         # only fires when a provider is set to null explicitly.
         assertion =
-          cfg.routing.provider == null -> (cfg.routing.settings == { } && cfg.routing.files == { });
+          cfg.routing.provider == null -> (cfg.routing.settings == { } && cfg.routing.extraFiles == { });
         message = ''
-          'services.traefik.routing.settings' or 'services.traefik.routing.files' is set but
+          'services.traefik.routing.settings' or 'services.traefik.routing.extraFiles' is set but
           'services.traefik.routing.provider' is null, so there is no file provider to serve it.
           Set 'provider' to 'file' or 'directory'.
         '';
@@ -669,13 +671,13 @@ in
           "${dir}/_nixos-settings.yml"."L+".argument = toString routingFile;
         }
         # The `_nixos-extra-` prefix is a separate namespace from `_nixos-settings.yml`,
-        # so a files entry named "settings" cannot collide with the settings file.
+        # so an extraFiles entry named "settings" cannot collide with the settings file.
         // (mapAttrs' (
           name: value:
           nameValuePair "${dir}/_nixos-extra-${name}.yml" {
             "L+".argument = toString (format.generate name value.settings);
           }
-        ) cfg.routing.files)
+        ) cfg.routing.extraFiles)
       ))
       (mkIf (cfg.localPluginPackages != [ ]) {
         "${cfg.dataDir}/plugins-local"."L+" = {
