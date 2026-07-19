@@ -25,9 +25,22 @@ option set.
 
 ### routing Configuration {#module-services-traefik-usage-routing}
 
-The routing configuration has a similar option set to the install configuration,
-but it also has the {option}`services.traefik.routing.dir` option, which allows
-you to define a directory containing several Traefik routing configuration files.
+The routing configuration separates the configuration itself from where Traefik
+reads it.
+
+- The {option}`services.traefik.routing.settings` option lets you declare the
+  routing configuration directly in the NixOS configuration.
+
+- The {option}`services.traefik.routing.files` option takes the same
+  configuration under a name. This is where other NixOS modules should
+  contribute: each entry stays identifiable and can be overridden on its own.
+
+- The {option}`services.traefik.routing.provider` option selects where Traefik's
+  file provider reads that configuration from: a single generated `file`, a
+  user-managed `externalFile`, or a watched `directory`. A directory keeps each
+  `files` entry in its own file and lets you drop in imperative files alongside
+  them; a single file has them all merged into one. Left unset, a file is
+  generated when either option is present.
 
 ## Plugins {#module-services-traefik-plugins}
 
