@@ -8,6 +8,7 @@
 
 let
   inherit (lib.types)
+    attrTag
     attrsOf
     bool
     listOf
@@ -27,7 +28,6 @@ let
     literalExpression
     maintainers
     mapAttrs'
-    mkDefault
     mkEnableOption
     mkIf
     mkMerge
@@ -37,6 +37,7 @@ let
     nameValuePair
     optional
     optionalAttrs
+    recursiveUpdate
     remove
     splitStringBy
     ;
@@ -46,7 +47,7 @@ let
 
   # check if the option has been changed
   ## isDefault :: String -> bool
-  ## eg. isDefault "install.settings" == (cfg.install.settings == opt.install.settings.default)
+  ## eg. isDefault "routing.file" == (cfg.routing.file == opt.routing.file.default)
   isDefault =
     attrPathStr:
     let
@@ -58,11 +59,26 @@ let
   # JSON is considered valid YAML by Traefik.
   format = pkgs.formats.json { };
 
+  # An external file is used verbatim; a generated file merges the derived file provider and
+  # local plugin registration into the user's settings.
   installFile =
-    if cfg.install.file == null then
-      format.generate "install_config.json" cfg.install.settings
+    if cfg.install ? file then
+      cfg.install.file
     else
-      cfg.install.file;
+      format.generate "install_config.json" (
+        recursiveUpdate cfg.install.settings (
+          optionalAttrs (cfg.localPlugins != [ ]) {
+            experimental.localPlugins = lib.listToAttrs (
+              map (plugin: nameValuePair plugin.plugin { inherit (plugin) moduleName; }) cfg.localPlugins
+            );
+          }
+          // optionalAttrs (cfg.routing.dir != null || cfg.routing.file != null) {
+            providers.file =
+              optionalAttrs (cfg.routing.dir != null) { directory = cfg.routing.dir; }
+              // optionalAttrs (cfg.routing.file != null) { filename = cfg.routing.file; };
+          }
+        )
+      );
 in
 {
   imports = [
@@ -123,44 +139,72 @@ in
     enable = mkEnableOption "Traefik web server";
     package = mkPackageOption pkgs "traefik" { };
 
-    install = {
-      file = mkOption {
-        default = null;
-        example = literalExpression "/path/to/install_config.toml";
-        type = nullOr path;
-        description = ''
-          Path to Traefik's install configuration file.
-
-          ::: {.note}
-          You cannot use this option alongside the declarative configuration options.
-          :::
-        '';
+    install = mkOption {
+      default = {
+        settings = { };
       };
-      settings = mkOption {
-        description = ''
-          Install configuration for Traefik, written in Nix.
-
-          ::: {.note}
-          This will be serialized to JSON (which is considered valid YAML) at build, and passed to Traefik as `--configfile`.
-          :::
-        '';
-        type = format.type;
-        default = {
-          entryPoints.http.address = ":80";
+      example = {
+        settings = {
+          entryPoints.web.address = ":80";
+          entryPoints.websecure.address = ":443";
         };
-        example = {
-          entryPoints = {
-            "web" = {
-              address = ":80";
-              http.redirections.entryPoint = {
-                permanent = true;
-                scheme = "https";
-                to = "websecure";
+      };
+      description = ''
+        Source of Traefik's [install configuration](https://doc.traefik.io/traefik/reference/install-configuration/boot-environment/).
+
+        ::: {.note}
+        Set exactly one of `file` or `settings`; they are mutually exclusive.
+        :::
+      '';
+      type = attrTag {
+        file = mkOption {
+          example = literalExpression "/path/to/install_config.toml";
+          type = path;
+          description = ''
+            Path to Traefik's install configuration file.
+
+            ::: {.note}
+            This is a complete install configuration that the module cannot merge
+            into: it cannot be combined with the module's declarative routing or
+            local-plugin options.
+            Use {option}`services.traefik.install.settings` for a configuration
+            the module generates and can merge into.
+            :::
+          '';
+        };
+        settings = mkOption {
+          description = ''
+            Install configuration for Traefik, written in Nix. Write Traefik's static
+            configuration directly here — `entryPoints`, `api`, `tls`, and so on map 1:1
+            to a Traefik config file.
+
+            ::: {.note}
+            This will be serialized to JSON (which is considered valid YAML) at build, and passed to Traefik as `--configfile`.
+            :::
+
+            ::: {.note}
+            The `providers.file` block is derived from {option}`services.traefik.routing`; do not
+            set `providers.file` here. `experimental.localPlugins` entries are generated from
+            {option}`services.traefik.localPlugins`, but you may still add per-plugin `settings`
+            (such as `envs` and `mounts`) here.
+            :::
+          '';
+          type = format.type;
+          default = { };
+          example = {
+            entryPoints = {
+              "web" = {
+                address = ":80";
+                http.redirections.entryPoint = {
+                  permanent = true;
+                  scheme = "https";
+                  to = "websecure";
+                };
               };
-            };
-            "websecure" = {
-              address = ":443";
-              asDefault = true;
+              "websecure" = {
+                address = ":443";
+                asDefault = true;
+              };
             };
           };
         };
@@ -348,36 +392,36 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = (!(isDefault "install.file")) -> isDefault "install.settings";
+        assertion =
+          cfg.install ? file
+          -> (
+            cfg.routing.file == null
+            && cfg.routing.files == { }
+            && cfg.routing.settings == { }
+            && cfg.localPlugins == [ ]
+          );
         message = ''
-          The 'services.traefik.install.file' and 'services.traefik.install.settings'
-          options are mutually exclusive for the Traefik install config.
-          It is recommended to use 'settings'.
+          None of the declarative configuration options may be used if Traefik is
+          being managed imperatively: 'services.traefik.install.file' is a complete
+          install configuration that the module cannot merge into.
+          The following options must be unset:
+            - ${
+              concatStringsSep "\n  - " (
+                optional (cfg.routing.file != null) "'services.traefik.routing.file'"
+                ++ optional (cfg.routing.files != { }) "'services.traefik.routing.files'"
+                ++ optional (cfg.routing.settings != { }) "'services.traefik.routing.settings'"
+                ++ optional (cfg.localPlugins != [ ]) "'services.traefik.localPlugins'"
+              )
+            }
         '';
       }
       {
         assertion =
-          (!(isDefault "install.file"))
-          -> (builtins.all (
-            map isDefault [
-              "routing.files"
-              "routing.dir"
-              "routing.file"
-            ]
-          ));
+          cfg.install ? settings -> !(lib.hasAttrByPath [ "providers" "file" ] cfg.install.settings);
         message = ''
-          None of the routing configuration options may be used if Traefik is being managed imperatively.
-          The following options have non-default values:
-            - ${
-              concatMapStringsSep "\n  - " (str: "'services.traefik.routing.${str}'") (
-                filter (attr: !(isDefault "routing.${attr}")) [
-                  "files"
-                  "dir"
-                  "file"
-                  "settings" # TODO: Drop in 27.05.
-                ]
-              )
-            }
+          Configure Traefik's file provider through 'services.traefik.routing.file' or
+          'services.traefik.routing.dir' rather than setting 'providers.file' in
+          'services.traefik.install.settings'.
         '';
       }
       {
@@ -440,27 +484,8 @@ in
       "net.core.wmem_max" = 2500000;
     };
 
-    # If a routing file or directory has been set, add it as a provider in the install configuration
-    services.traefik = mkIf (isDefault "install.file") {
-      routing.files = mkIf (!(isDefault "routing.settings")) {
-        "custom-migrated".settings = cfg.routing.settings;
-      };
-      install.settings = mkMerge [
-
-        (mkIf (cfg.localPlugins != [ ]) {
-          experimental.localPlugins = lib.listToAttrs (
-            map (plugin: lib.nameValuePair plugin.plugin { inherit (plugin) moduleName; }) cfg.localPlugins
-          );
-        })
-
-        (mkIf (cfg.routing.dir != null || !(isDefault "routing.file")) {
-          providers.file = {
-            directory = mkIf (cfg.routing.dir != null) cfg.routing.dir;
-            filename = mkIf (!(isDefault "routing.file")) cfg.routing.file;
-            watch = mkDefault true;
-          };
-        })
-      ];
+    services.traefik.routing.files = mkIf (cfg.install ? settings && !(isDefault "routing.settings")) {
+      "custom-migrated".settings = cfg.routing.settings;
     };
 
     systemd.services.traefik = {
