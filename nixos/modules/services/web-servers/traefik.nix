@@ -400,7 +400,7 @@ in
 
     warnings =
       optional (!(builtins.elem "docker" cfg.supplementaryGroups -> config.virtualisation.docker.enable))
-        "'services.traefik.supplementaryGroups' contains the 'docker' group, but 'services.docker' is not enabled."
+        "'services.traefik.supplementaryGroups' contains the 'docker' group, but 'virtualisation.docker.enable' is not enabled."
       ++ optional (!(isDefault "routing.settings")) ''
         'services.traefik.routing.settings' is in use, but that option is deprecated.
         Please migrate your configuration to an explicit file instead.
