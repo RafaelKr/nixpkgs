@@ -139,6 +139,18 @@ in
     enable = mkEnableOption "Traefik web server";
     package = mkPackageOption pkgs "traefik" { };
 
+    # ExecStart is built from this, so it is exactly the file the daemon reads.
+    # Read-only view of the exact file the daemon runs; also used by the NixOS tests.
+    installConfigFile = mkOption {
+      type = path;
+      readOnly = true;
+      description = ''
+        The effective install configuration file the daemon is started with, passed as
+        `--configfile`: either {option}`services.traefik.install.file` verbatim, or the file
+        generated from {option}`services.traefik.install.settings`.
+      '';
+    };
+
     install = mkOption {
       default = {
         settings = { };
@@ -390,6 +402,8 @@ in
   };
 
   config = mkIf cfg.enable {
+    services.traefik.installConfigFile = installFile;
+
     assertions = [
       {
         assertion =
@@ -498,7 +512,7 @@ in
       unitConfig.Documentation = "https://doc.traefik.io/traefik/";
       serviceConfig = {
         EnvironmentFile = cfg.environmentFiles;
-        ExecStart = "${getExe cfg.package} --configfile=${installFile}";
+        ExecStart = "${getExe cfg.package} --configfile=${cfg.installConfigFile}";
         Type = "notify";
         User = cfg.user;
         Group = cfg.group;
