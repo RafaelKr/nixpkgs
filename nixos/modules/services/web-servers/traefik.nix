@@ -196,7 +196,11 @@ in
       files = mkOption {
         type = attrsOf (submodule {
           options.settings = mkOption {
-            type = format.type;
+            type = attrsOf format.type;
+            # Empty entries are deliberate: a contribution like `settings = mkIf cond { ... }`
+            # must degrade to an empty attrset to keep it mergeable without errors. It still
+            # renders `{}` to Traefik, which is handled as a no-op.
+            default = { };
             description = ''
               Routing configuration for Traefik, written in Nix.
 
