@@ -71,6 +71,30 @@
   "module-services-keycloak-unix-socket": [
     "index.html#module-services-keycloak-unix-socket"
   ],
+  "module-services-netbird-server-complete-example": [
+    "index.html#module-services-netbird-server-complete-example"
+  ],
+  "module-services-netbird-server-database": [
+    "index.html#module-services-netbird-server-database"
+  ],
+  "module-services-netbird-server-database-postgres": [
+    "index.html#module-services-netbird-server-database-postgres"
+  ],
+  "module-services-netbird-server-embedded-idp": [
+    "index.html#module-services-netbird-server-embedded-idp"
+  ],
+  "module-services-netbird-server-quickstart-coturn": [
+    "index.html#module-services-netbird-server-quickstart-coturn"
+  ],
+  "module-services-netbird-server-quickstart-relay": [
+    "index.html#module-services-netbird-server-quickstart-relay"
+  ],
+  "module-services-netbird-server-relay-config": [
+    "index.html#module-services-netbird-server-relay-config"
+  ],
+  "module-services-netbird-server-relay-vs-coturn": [
+    "index.html#module-services-netbird-server-relay-vs-coturn"
+  ],
   "module-services-lxmd": [
     "index.html#module-services-lxmd"
   ],
