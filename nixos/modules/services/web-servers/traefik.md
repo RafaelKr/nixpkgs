@@ -45,8 +45,15 @@ the client's IP address, to block all connections not coming from the Netherland
 {
   services.traefik = {
     localPlugins = with pkgs; [ geoblock ];
-    install.settings.entryPoints.websecure.http.middlewares = "my-geoblock";
-    routing.settings.http.middlewares.my-geoblock.plugin.geoblock.countries = [ "NL" ];
+    install.settings.entryPoints.websecure = {
+      address = ":443";
+      http.middlewares = [ "my-geoblock@file" ];
+    };
+    routing.settings.http.middlewares.my-geoblock.plugin.geoblock = {
+      api = "https://get.geojs.io/v1/ip/country/{ip}";
+      cacheSize = 15;
+      countries = [ "NL" ];
+    };
   };
 }
 ```
