@@ -56,7 +56,7 @@
         services.traefik = {
           enable = true;
 
-          dynamicConfigOptions = {
+          routing.settings = {
             tls.certificates =
               let
                 certDir = pkgs.runCommand "selfSignedCerts" { buildInputs = [ pkgs.openssl ]; } ''
@@ -130,7 +130,7 @@
             };
           };
 
-          staticConfigOptions = {
+          install.settings = {
             global = {
               checkNewVersion = false;
               sendAnonymousUsage = false;
