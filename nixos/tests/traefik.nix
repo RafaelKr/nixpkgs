@@ -3,7 +3,8 @@
 #      per-entry routing.files merging.
 #   2. the generated --configfile content (install.settings, the injected
 #      providers.file block, plugin registration).
-#   3. proxying to an HTTP backend on another machine and to a Docker container.
+#   3. 1:1 structural rendering of Traefik v3.7 docs examples.
+#   4. proxying to an HTTP backend on another machine and to a Docker container.
 { lib, ... }:
 {
   name = "traefik";
@@ -20,6 +21,10 @@
   # Both nodes and containers are declared, which would auto-enable devnet; force it off since
   # that feature is not available on nixpkgs infrastructure.
   requiredFeatures.devnet = lib.mkForce false;
+
+  # PyYAML lets the docs subtests compare our generated (JSON) config files against
+  # Traefik's own documentation examples (YAML) by structure, independent of key order.
+  extraPythonPackages = p: [ p.pyyaml ];
 
   # Shared install configuration for every Traefik node.
   defaults = {
@@ -164,6 +169,114 @@
           };
         };
       };
+
+    # The three "docs" nodes below mirror verbatim examples from Traefik's own v3.7 documentation
+    # and assert that the module renders them 1:1. Each generated file is parsed and compared to the
+    # upstream YAML as data, so key order is ignored while list order (meaningful in Traefik) is kept.
+
+    # Test objective: install.settings renders 1:1 to Traefik's canonical static ("traefik.yml")
+    # install configuration. No routing provider is set, so the generated --configfile is
+    # install.settings verbatim -- including providers.docker: {}, a meaningful empty object that
+    # must survive rendering. mkForce replaces the shared `defaults` install.settings so the
+    # comparison is against the docs example alone.
+    # Docs (v3.7): https://github.com/traefik/traefik/blob/v3.7/docs/content/reference/install-configuration/boot-environment.md
+    docstatic = {
+      services.traefik = {
+        enable = true;
+        install.settings = lib.mkForce {
+          entryPoints.web.address = ":80";
+          entryPoints.websecure.address = ":443";
+          providers.docker = { };
+          api.dashboard = true;
+          log.level = "INFO";
+        };
+      };
+    };
+
+    # Test objective: routing.settings (content-sensing default file mode) renders 1:1 to Traefik's
+    # canonical single-service file-provider example, including the meaningful tls: {} (which enables
+    # TLS on the router). Guards the file-mode render path against regressions.
+    # Docs (v3.7): https://github.com/traefik/traefik/blob/v3.7/docs/content/reference/routing-configuration/other-providers/file.md
+    docfile = {
+      services.traefik = {
+        enable = true;
+        routing.settings = {
+          http.routers.app = {
+            rule = "Host(`example.com`)";
+            entryPoints = [ "websecure" ];
+            service = "app";
+            tls = { };
+          };
+          http.services.app.loadBalancer.servers = [
+            { url = "http://127.0.0.1:8080"; }
+          ];
+        };
+      };
+    };
+
+    # Test objective: directory mode renders each routing.files entry to its own
+    # _nixos-extra-<name>.yml, each 1:1 with a file-provider example from the same docs page:
+    # multiple routers/services, middlewares + TLS options, and the http.yml + tls.yml split of the
+    # "loading multiple dynamic configuration files" example.
+    # Docs (v3.7): https://github.com/traefik/traefik/blob/v3.7/docs/content/reference/routing-configuration/other-providers/file.md
+    docdir = {
+      services.traefik = {
+        enable = true;
+        routing = {
+          provider.directory.path = "/etc/traefik/dynamic";
+          files = {
+            # Example: specifying more than one router and service
+            "example2".settings = {
+              http.routers.app = {
+                rule = "Host(`example-a.com`)";
+                service = "app";
+              };
+              http.routers.admin = {
+                rule = "Host(`example-b.com`)";
+                service = "admin";
+              };
+              http.services.app.loadBalancer.servers = [ { url = "http://127.0.0.1:8000"; } ];
+              http.services.admin.loadBalancer.servers = [ { url = "http://127.0.0.1:9000"; } ];
+            };
+            # Example: declaring and referencing middlewares (with TLS options)
+            "example3".settings = {
+              http.routers.app = {
+                rule = "Host(`secure.example.com`)";
+                entryPoints = [ "websecure" ];
+                middlewares = [ "secure-headers" ];
+                service = "app";
+                tls.options = "modern";
+              };
+              http.middlewares.secure-headers.headers = {
+                stsSeconds = 31536000;
+                forceSTSHeader = true;
+              };
+              http.services.app.loadBalancer.servers = [ { url = "http://127.0.0.1:8080"; } ];
+              tls.options.modern = {
+                minVersion = "VersionTLS12";
+                sniStrict = true;
+              };
+            };
+            # Example: loading multiple dynamic configuration files (http.yml + tls.yml)
+            "http".settings = {
+              http.routers.app = {
+                rule = "Host(`example.com`)";
+                service = "app";
+              };
+              http.services.app.loadBalancer.servers = [ { url = "http://127.0.0.1:8080"; } ];
+            };
+            "tls".settings = {
+              tls.certificates = [
+                {
+                  certFile = "/certs/example.crt";
+                  keyFile = "/certs/example.key";
+                }
+              ];
+            };
+          };
+        };
+      };
+    };
   };
 
   # Docker provider: a full VM (not an nspawn container) because it runs the Docker daemon.
@@ -201,10 +314,14 @@
     in
     ''
       import json
+      import yaml
+      import textwrap
 
       # Store paths of the exact --configfile each daemon is started with, resolved at eval time.
       INSTALL_CONFIG = {
           "config": "${installConfigOf containers.config}",
+          "docstatic": "${installConfigOf containers.docstatic}",
+          "docdir": "${installConfigOf containers.docdir}",
       }
 
       def configfile(node):
@@ -216,6 +333,20 @@
           # routes in its background goroutine. timeout=60 absorbs load variance.
           body = client.wait_until_succeeds(f"curl -sSf -H Host:{host} http://{node.name}/", timeout=60)
           assert "Directory listing for " in body, body
+
+      def assert_renders_verbatim(got_json_text, docs_yaml, label, show=True):
+          # Both sides parse to plain dicts/lists, so == ignores key order but preserves list order
+          # (server order is meaningful in Traefik) -- exactly the 1:1 comparison we want.
+          expected = yaml.safe_load(textwrap.dedent(docs_yaml))
+          got = json.loads(got_json_text)
+          if show:
+              # Show the upstream docs example and what the module generated from it.
+              print(f"### {label}")
+              print("# docs example (YAML):")
+              print(textwrap.dedent(docs_yaml).strip())
+              print("# generated config (JSON):")
+              print(json.dumps(got, indent=2))
+          assert got == expected, f"{label}: got={got!r} expected={expected!r}"
 
       start_all()
 
@@ -232,6 +363,14 @@
       # This subtest reads only the generated --configfile, which exists at eval time, so wait
       # for boot only, not the unit.
       config.wait_for_unit("multi-user.target")
+
+      # The docs nodes only check config generation. The generated files exist regardless of whether
+      # the daemon fully starts (docstatic enables providers.docker with no Docker present; docfile
+      # routes via a websecure entryPoint no node declares; docdir references cert files that do
+      # not exist), so wait only for the machines to boot.
+      docstatic.wait_for_unit("multi-user.target")
+      docfile.wait_for_unit("multi-user.target")
+      docdir.wait_for_unit("multi-user.target")
 
       docker.wait_for_unit("traefik.service")
       docker.wait_for_open_port(80)
@@ -265,6 +404,151 @@
           assert plugin["moduleName"] == "github.com/example/wasm-plugin-name", cfg
           assert plugin["settings"]["envs"] == ["SECRET_ENV"], cfg
           assert plugin["settings"]["mounts"] == ["/path/to/mount"], cfg
+
+      with subtest("the 1:1 comparison has teeth (a deliberate mismatch must fail)"):
+          # Negative control: guards against a vacuously-passing test. tls: {} (empty, which enables
+          # TLS) must not compare equal to tls: { options: modern }. If this ever stops raising, the
+          # helper is broken and every assertion below is meaningless.
+          detected = False
+          try:
+              assert_renders_verbatim(
+                  '{"tls": {}}',
+                  """
+                  tls:
+                    options: modern
+                  """,
+                  "negative control",
+                  show=False,
+              )
+          except AssertionError:
+              detected = True
+          assert detected, "assert_renders_verbatim did not detect a mismatch"
+
+      with subtest("install.settings renders 1:1 to the boot-environment traefik.yml example"):
+          assert_renders_verbatim(
+              configfile(docstatic),
+              """
+              entryPoints:
+                web:
+                  address: ":80"
+                websecure:
+                  address: ":443"
+              providers:
+                docker: {}
+              api:
+                dashboard: true
+              log:
+                level: INFO
+              """,
+              "install.settings (boot-environment.md)",
+          )
+
+      with subtest("routing.settings (file mode) renders 1:1 to the single-service file-provider example"):
+          assert_renders_verbatim(
+              docfile.succeed("cat /etc/traefik/routing.yml"),
+              """
+              http:
+                routers:
+                  app:
+                    rule: Host(`example.com`)
+                    entryPoints:
+                      - websecure
+                    service: app
+                    tls: {}
+                services:
+                  app:
+                    loadBalancer:
+                      servers:
+                        - url: http://127.0.0.1:8080
+              """,
+              "routing example 1",
+          )
+
+      with subtest("directory mode renders each routing.files entry 1:1 to its file-provider example"):
+          assert_renders_verbatim(
+              docdir.succeed("cat /etc/traefik/dynamic/_nixos-extra-example2.yml"),
+              """
+              http:
+                routers:
+                  app:
+                    rule: Host(`example-a.com`)
+                    service: app
+                  admin:
+                    rule: Host(`example-b.com`)
+                    service: admin
+                services:
+                  app:
+                    loadBalancer:
+                      servers:
+                        - url: http://127.0.0.1:8000
+                  admin:
+                    loadBalancer:
+                      servers:
+                        - url: http://127.0.0.1:9000
+              """,
+              "routing example 2",
+          )
+          assert_renders_verbatim(
+              docdir.succeed("cat /etc/traefik/dynamic/_nixos-extra-example3.yml"),
+              """
+              http:
+                routers:
+                  app:
+                    rule: Host(`secure.example.com`)
+                    entryPoints:
+                      - websecure
+                    middlewares:
+                      - secure-headers
+                    service: app
+                    tls:
+                      options: modern
+                middlewares:
+                  secure-headers:
+                    headers:
+                      stsSeconds: 31536000
+                      forceSTSHeader: true
+                services:
+                  app:
+                    loadBalancer:
+                      servers:
+                        - url: http://127.0.0.1:8080
+              tls:
+                options:
+                  modern:
+                    minVersion: VersionTLS12
+                    sniStrict: true
+              """,
+              "routing example 3",
+          )
+          assert_renders_verbatim(
+              docdir.succeed("cat /etc/traefik/dynamic/_nixos-extra-http.yml"),
+              """
+              http:
+                routers:
+                  app:
+                    rule: Host(`example.com`)
+                    service: app
+                services:
+                  app:
+                    loadBalancer:
+                      servers:
+                        - url: http://127.0.0.1:8080
+              """,
+              "routing example 4 (http.yml)",
+          )
+          assert_renders_verbatim(
+              docdir.succeed("cat /etc/traefik/dynamic/_nixos-extra-tls.yml"),
+              """
+              tls:
+                certificates:
+                  - certFile: /certs/example.crt
+                    keyFile: /certs/example.key
+              """,
+              "routing example 4 (tls.yml)",
+          )
+          # provider wiring: routing.provider.directory drives the static providers.file.directory
+          cfg = json.loads(configfile(docdir))
+          assert cfg["providers"]["file"]["directory"] == "/etc/traefik/dynamic", cfg
 
       with subtest("Reach a Docker container via Traefik"):
           # The docker provider discovers container labels asynchronously after
