@@ -59,8 +59,9 @@
         };
       };
 
-    # File mode (content-sensing default): routing.settings and every routing.files entry are
-    # merged into the single generated file linked at /etc/traefik/routing.yml.
+    # File mode (content-sensing default) with an explicit non-default path: routing.settings and
+    # every routing.files entry are merged into the single generated file linked at
+    # /etc/traefik/custom-routes.yml, which providers.file.filename must follow.
     declare = {
       services.traefik = {
         enable = true;
@@ -76,6 +77,8 @@
               { url = "http://simplehttp"; }
             ];
           };
+
+          provider.file.path = "/etc/traefik/custom-routes.yml";
 
           files."extradeclare".settings = {
             http.routers."extradeclarehttp" = {
@@ -322,6 +325,7 @@
           "config": "${installConfigOf containers.config}",
           "docstatic": "${installConfigOf containers.docstatic}",
           "docdir": "${installConfigOf containers.docdir}",
+          "declare": "${installConfigOf containers.declare}",
       }
 
       def configfile(node):
@@ -404,6 +408,10 @@
           assert plugin["moduleName"] == "github.com/example/wasm-plugin-name", cfg
           assert plugin["settings"]["envs"] == ["SECRET_ENV"], cfg
           assert plugin["settings"]["mounts"] == ["/path/to/mount"], cfg
+
+      with subtest("declare's install config points providers.file at its non-default path"):
+          cfg = json.loads(configfile(declare))
+          assert cfg["providers"]["file"]["filename"] == "/etc/traefik/custom-routes.yml", cfg
 
       with subtest("the 1:1 comparison has teeth (a deliberate mismatch must fail)"):
           # Negative control: guards against a vacuously-passing test. tls: {} (empty, which enables
