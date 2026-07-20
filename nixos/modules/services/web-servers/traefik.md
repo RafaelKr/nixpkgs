@@ -32,8 +32,9 @@ you to define a directory containing several Traefik routing configuration files
 ## Plugins {#module-services-traefik-plugins}
 
 When using the structured `settings` configuration options, the Traefik module
-supports [plugins][upstream-3]. Plugins in Traefik are an additional routing
-configuration source and can programatically set up routes and proxies.
+supports [plugins][upstream-3]. Plugins extend Traefik with middlewares and
+additional configuration providers; middleware plugins are referenced from the
+routing configuration, as in the example below.
 
 The {option}`services.traefik.localPlugins` option takes in a list of derivations
 that contain Traefik plugins. Some plugins are available in the package set, and
@@ -92,7 +93,7 @@ derivation to include the `_isTraefikPlugin` attribute.
         root = ./my-plugin;
         fileset = ./my-plugin;
       })
-      # Supress Traefik module warning.
+      # Suppress Traefik module warning.
       # Don't forget to ensure that ./my-plugin has an appropriate
       # directory structure as expected by Traefik.
       // {

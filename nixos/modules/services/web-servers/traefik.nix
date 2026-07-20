@@ -188,8 +188,8 @@ in
           Path to the directory Traefik should watch for configuration files.
 
           ::: {.warning}
-          Files in this directory matching the glob `_nixos-*` (reserved for Nix-managed routing configurations) will be deleted as part of
-          `systemd-tmpfiles-resetup.service`, _**regardless of their origin.**_.
+          Files in this directory matching the glob `_nixos-*` (reserved for Nix-managed routing configurations) will be deleted whenever
+          `systemd-tmpfiles` runs with `--remove` (at boot, and on any activation that changes the tmpfiles rules), _**regardless of their origin.**_
           :::
         '';
       };
@@ -232,7 +232,7 @@ in
 
           ::: {.note}
           Due to [a limitation in Traefik](https://github.com/traefik/traefik/issues/10890); any syntax error in a routing configuration will cause the _**entire file provider**_ to be ignored.
-          This may cause interuption in service, which may include access to the Traefik dashboard, if [enabled and configured](https://doc.traefik.io/traefik/reference/install-configuration/api-dashboard/).
+          This may cause interruption in service, which may include access to the Traefik dashboard, if [enabled and configured](https://doc.traefik.io/traefik/reference/install-configuration/api-dashboard/).
           :::
         '';
       };
@@ -261,7 +261,7 @@ in
       type = listOf package;
       example = literalExpression "[ pkgs.fosrl-badger pkgs.geoblock ]";
       description = ''
-        List of local plugins to be added to the `localPlugins` attribute in the install configuration. These plugins are usually packaged in Nixpkgs, and are managed by Nix.
+        List of local plugins to be added to `experimental.localPlugins` in the install configuration. These plugins are usually packaged in Nixpkgs, and are managed by Nix.
       '';
     };
 
@@ -336,10 +336,11 @@ in
         TRAEFIK_CERTIFICATESRESOLVERS_<NAME>_ACME_EAB_HMACENCODED=
         TRAEFIK_CERTIFICATESRESOLVERS_<NAME>_ACME_EAB_KID=
         ```
-        ::: {.warn}
+        ::: {.warning}
         The traefik install configuration methods (env, CLI, and file) are mutually exclusive.
+        It's crucial to choose one method and stick to it, as mixing different configuration
+        options is not supported and can lead to unexpected behavior.
         :::
-        ```
       '';
     };
   };
@@ -397,9 +398,10 @@ in
       {
         assertion = cfg.group != "docker";
         message = ''
-          Setting the primary group to 'docker' will cause files, such as those generated
-          by 'services.traefik.routing.files', to be owned by the group 'docker', which
-          may be a security risk. Use 'services.traefik.supplementaryGroups' instead.
+          Setting the primary group to 'docker' will cause files Traefik creates at
+          runtime, such as the ACME certificate store in 'services.traefik.dataDir',
+          to be owned by the group 'docker', which may be a security risk.
+          Use 'services.traefik.supplementaryGroups' instead.
         '';
       }
     ];
