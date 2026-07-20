@@ -267,9 +267,10 @@ in
         Location for any persistent data Traefik creates, such as the ACME certificate store.
 
         ::: {.note}
-        If left as the default value, this directory will automatically be created
-        before the Traefik server starts, otherwise you are responsible for ensuring
-        the directory exists with appropriate ownership and permissions.
+        When {option}`services.traefik.user` or {option}`services.traefik.group` is left at
+        its default `traefik`, this directory is created automatically before the Traefik
+        server starts. Otherwise you are responsible for ensuring it exists with appropriate
+        ownership and permissions.
         :::
       '';
     };
@@ -492,10 +493,16 @@ in
     };
 
     systemd.tmpfiles.settings."10-traefik" = mkMerge [
-      (mkIf (cfg.user == "traefik") {
+      (mkIf (cfg.user == "traefik" || cfg.group == "traefik") {
         ${cfg.dataDir}.d = {
-          inherit (cfg) user group;
-          mode = "0700";
+          # Claim ownership only for the halves left at the module default; an omitted
+          # half falls back to root rather than the custom identity — chowning to a
+          # shared uid like `nobody` would open the directory to every process running
+          # as it. With a custom user the default traefik group is the daemon's access
+          # path (0770); with the default user the owner bits suffice (0700).
+          user = mkIf (cfg.user == "traefik") cfg.user;
+          group = mkIf (cfg.group == "traefik") cfg.group;
+          mode = if cfg.user == "traefik" then "0700" else "0770";
         };
       })
       (mkIf (cfg.routing.dir != null) (
