@@ -1,6 +1,8 @@
-# Test Traefik as a reverse proxy of a local web service
-# and a Docker container.
-{ pkgs, lib, ... }:
+# verifies:
+#   1. routing.settings routes are rendered into the generated routing file and
+#      served by the file provider.
+#   2. proxying to a local web service and a Docker container.
+{ lib, ... }:
 {
   name = "traefik";
   meta = with lib.maintainers; {
@@ -12,24 +14,21 @@
 
   nodes = {
     client =
-      { config, pkgs, ... }:
+      { pkgs, ... }:
       {
         environment.systemPackages = [ pkgs.curl ];
       };
     traefik =
-      { config, pkgs, ... }:
+      { pkgs, ... }:
       {
         virtualisation.oci-containers = {
           backend = "docker";
           containers.nginx = {
-            extraOptions = [
-              "-l"
-              "traefik.enable=true"
-              "-l"
-              "traefik.http.routers.nginx.entrypoints=web"
-              "-l"
-              "traefik.http.routers.nginx.rule=Host(`nginx.traefik.test`)"
-            ];
+            labels = {
+              "traefik.enable" = "true";
+              "traefik.http.routers.nginx.entrypoints" = "web";
+              "traefik.http.routers.nginx.rule" = "Host(`nginx.traefik.test`)";
+            };
             image = "nginx-container";
             imageStream = pkgs.dockerTools.examples.nginxStream;
           };
@@ -39,8 +38,9 @@
 
         services.traefik = {
           enable = true;
+          supplementaryGroups = [ "docker" ];
 
-          routing.files.NixOSTest.settings = {
+          routing.settings = {
             http.routers.simplehttp = {
               rule = "Host(`simplehttp.traefik.test`)";
               entryPoints = [ "web" ];
@@ -55,6 +55,8 @@
               ];
             };
           };
+
+          routing.provider.file.path = "/etc/traefik/routing.yml";
 
           install.settings = {
             global = {
@@ -73,8 +75,6 @@
           serviceConfig.Type = "simple";
           wantedBy = [ "multi-user.target" ];
         };
-
-        users.users.traefik.extraGroups = [ "docker" ];
       };
   };
 
