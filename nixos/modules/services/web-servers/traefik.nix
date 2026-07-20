@@ -205,7 +205,8 @@ in
               Routing configuration for Traefik, written in Nix.
 
               ::: {.note}
-              This will be serialized to JSON (which is considered valid YAML) at build, and passed as part of the install file.
+              This will be serialized to JSON (which is considered valid YAML) at build and
+              written to the routing directory.
               :::
             '';
             example = {
