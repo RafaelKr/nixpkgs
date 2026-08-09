@@ -101,7 +101,7 @@ in
       type = path;
       description = ''
         Path to a file containing the proxy access token (`nbx_...`), minted
-        out-of-band on the management server (`netbird-mgmt token create` or the
+        out-of-band on the management server (`netbird-mgmt admin token create` or the
         reverse-proxy REST API). The proxy refuses to start without it. The file
         should contain only the raw token value.
       '';

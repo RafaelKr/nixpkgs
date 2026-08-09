@@ -230,7 +230,7 @@ The NetBird reverse proxy (`server.reverseProxy`) exposes NetBird network resour
 
 On a single-IP host the ingress front already owns `:443`, so the proxy listens on `:8443` and is reached through the [Traefik backend](#opt-services.netbird.server.ingress.traefik.enable), which L4 SNI-passthroughs any otherwise-unmatched SNI to it (nginx cannot forward TLS, so the proxy requires the Traefik backend there). Enabling `server.reverseProxy` without an ingress leaves the proxy owning its port directly, for a dedicated host.
 
-The proxy authenticates to management with an access token minted out-of-band (`netbird-mgmt token create` or the reverse-proxy REST API) and provided through `reverseProxy.tokenFile`.
+The proxy authenticates to management with an access token minted out-of-band (`netbird-mgmt admin token create` or the reverse-proxy REST API) and provided through `reverseProxy.tokenFile`.
 
 ```nix
 { config, ... }:
